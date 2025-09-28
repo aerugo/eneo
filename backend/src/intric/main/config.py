@@ -3,9 +3,10 @@ import logging
 import os
 from typing import Optional
 
-from intric.definitions import ROOT_DIR
 from pydantic import computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from intric.definitions import ROOT_DIR
 
 MANIFEST_LOCATION = f"{ROOT_DIR}/.release-please-manifest.json"
 
@@ -56,6 +57,7 @@ class Settings(BaseSettings):
     postgres_db: str
     redis_host: str
     redis_port: int
+    redis_password: Optional[str] = None
 
     # Mobilityguard
     mobilityguard_discovery_endpoint: Optional[str] = None

@@ -1,12 +1,38 @@
-import redis.asyncio as aioredis
 from datetime import datetime, timezone
 from typing import NamedTuple
 
+import redis.asyncio as aioredis
+
 from intric.main.config import SETTINGS
 
-pool = aioredis.ConnectionPool.from_url(
-    f"redis://{SETTINGS.redis_host}:{SETTINGS.redis_port}"
-)
+"""
+Redis Connection Setup with Conditional Authentication
+
+This module establishes a Redis connection pool with optional password authentication.
+Authentication is enabled when the REDIS_PASSWORD environment variable is set.
+
+Environment Variables:
+- REDIS_HOST: Redis server hostname (required)
+- REDIS_PORT: Redis server port (required)
+- REDIS_PASSWORD: Redis password (optional)
+
+Usage:
+- If REDIS_PASSWORD is set: Connects using password authentication
+- If REDIS_PASSWORD is not set: Connects without authentication (assumes no password)
+
+The Redis connection is shared across the application for:
+- WebSocket pub/sub messaging
+- Worker health monitoring
+- General Redis operations
+"""
+
+# Build Redis URL with conditional password authentication
+if SETTINGS.redis_password:
+    redis_url = f"redis://:{SETTINGS.redis_password}@{SETTINGS.redis_host}:{SETTINGS.redis_port}"
+else:
+    redis_url = f"redis://{SETTINGS.redis_host}:{SETTINGS.redis_port}"
+
+pool = aioredis.ConnectionPool.from_url(redis_url)
 r = aioredis.Redis(connection_pool=pool)
 
 
@@ -30,22 +56,22 @@ async def get_worker_health() -> WorkerHealth:
         worker_health_data = await r.get(health_key)
 
         if worker_health_data:
-            worker_health_str = worker_health_data.decode('utf-8')
+            worker_health_str = worker_health_data.decode("utf-8")
             return WorkerHealth(
                 status="HEALTHY",
                 last_heartbeat=datetime.now(timezone.utc).isoformat(),
-                details=worker_health_str
+                details=worker_health_str,
             )
         else:
             return WorkerHealth(
                 status="UNHEALTHY",
                 last_heartbeat=None,
-                details="Worker health check key not found or expired"
+                details="Worker health check key not found or expired",
             )
 
     except Exception as e:
         return WorkerHealth(
             status="UNKNOWN",
             last_heartbeat=None,
-            details=f"Redis connection error: {str(e)}"
+            details=f"Redis connection error: {str(e)}",
         )

@@ -17,6 +17,7 @@
 | POSTGRES_DB                      | x        |                                                          |
 | REDIS_HOST                       | x        |                                                          |
 | REDIS_PORT                       | x        |                                                          |
+| REDIS_PASSWORD                   |          | Redis password (optional, if authentication required)   |
 | MOBILITYGUARD_DISCOVERY_ENDPOINT |          |                                                          |
 | MOBILITYGUARD_CLIENT_ID          |          |                                                          |
 | MOBILITYGUARD_CLIENT_SECRET      |          |                                                          |

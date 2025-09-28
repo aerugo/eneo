@@ -18,11 +18,16 @@ class JobManager:
         self._redis: ArqRedis | None = None
 
     async def init(self):
-        self._redis = await create_pool(
-            RedisSettings(
-                host=get_settings().redis_host, port=get_settings().redis_port
-            )
+        settings = get_settings()
+        redis_settings = RedisSettings(
+            host=settings.redis_host, port=settings.redis_port
         )
+
+        # Add password authentication if REDIS_PASSWORD environment variable is set
+        if settings.redis_password:
+            redis_settings.password = settings.redis_password
+
+        self._redis = await create_pool(redis_settings)
 
         logger.debug(
             f"Job manager connected to redis on host {get_settings().redis_host}"

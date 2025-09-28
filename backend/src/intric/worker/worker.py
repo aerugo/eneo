@@ -71,6 +71,10 @@ class Worker:
         self.redis_settings = RedisSettings(
             host=settings.redis_host, port=settings.redis_port
         )
+
+        # Add password authentication if REDIS_PASSWORD environment variable is set
+        if settings.redis_password:
+            self.redis_settings.password = settings.redis_password
         self.on_startup = self.startup
         self.on_shutdown = self.shutdown
         self.retry_jobs = False
