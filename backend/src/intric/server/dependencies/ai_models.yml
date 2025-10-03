@@ -373,7 +373,7 @@ completion_models:
     stability: "stable"
     hosting: "swe"
     description: OpenAI's open-source 120B parameter model, offering high performance and flexibility.
-    org: OpenAI
+    org: Berget
     vision: false
     reasoning: false
     litellm_model_name: "berget/gpt-oss-120b"
@@ -386,7 +386,7 @@ completion_models:
     stability: "stable"
     hosting: "swe"
     description: DeepSeek R1 GGUF
-    org: Microsoft
+    org: Berget
     vision: false
     reasoning: false
     litellm_model_name: "berget/unsloth/MAI-DS-R1-GGUF"
