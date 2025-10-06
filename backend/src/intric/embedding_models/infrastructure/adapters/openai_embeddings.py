@@ -26,10 +26,23 @@ class OpenAIEmbeddingAdapter(EmbeddingModelAdapter):
     def __init__(
         self,
         model: "EmbeddingModel",
-        client=openai.AsyncOpenAI(api_key=get_settings().openai_api_key),
+        client: openai.AsyncOpenAI | None = None,
     ):
-        self.client = client
+        self._client = client
         super().__init__(model)
+
+    @property
+    def client(self) -> openai.AsyncOpenAI:
+        """Lazily initialize the OpenAI client when first accessed."""
+        if self._client is None:
+            api_key = get_settings().openai_api_key
+            if not api_key:
+                raise ValueError(
+                    "OpenAI API key is not configured. "
+                    "Set OPENAI_API_KEY environment variable to use OpenAI embeddings."
+                )
+            self._client = openai.AsyncOpenAI(api_key=api_key)
+        return self._client
 
     async def get_embeddings(self, chunks: list["InfoBlobChunk"]) -> ChunkEmbeddingList:
         chunk_embedding_list = ChunkEmbeddingList()
