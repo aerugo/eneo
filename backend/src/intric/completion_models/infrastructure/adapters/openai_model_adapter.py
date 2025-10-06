@@ -27,11 +27,24 @@ class OpenAIModelAdapter(CompletionModelAdapter):
     def __init__(
         self,
         model: CompletionModel,
-        client: AsyncOpenAI = AsyncOpenAI(api_key=get_settings().openai_api_key),
+        client: AsyncOpenAI | None = None,
     ):
         self.model = model
-        self.client = client
+        self._client = client
         self.extra_headers = None
+
+    @property
+    def client(self) -> AsyncOpenAI:
+        """Lazily initialize the OpenAI client when first accessed."""
+        if self._client is None:
+            api_key = get_settings().openai_api_key
+            if not api_key:
+                raise ValueError(
+                    "OpenAI API key is not configured. "
+                    "Set OPENAI_API_KEY environment variable to use OpenAI models."
+                )
+            self._client = AsyncOpenAI(api_key=api_key)
+        return self._client
 
     def _get_kwargs(self, kwargs: ModelKwargs | None):
         if kwargs is None:
