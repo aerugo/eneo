@@ -8,6 +8,7 @@ authors = ["inooLabs"]
 python = "^3.11"
 fastapi = "^0"
 uvicorn = {extras = ["standard"], version = "^0.22.0"}
+hypercorn = "^0.16.0"
 openai = "^1.4"
 python-dotenv = "^0.21.1"
 pydantic = {extras = ["email"], version = "^2"}
@@ -46,7 +47,7 @@ html2text = "^2024.2.26"
 beautifulsoup4 = "^4.12.3"
 crochet = "^2.1.1"
 pgvector = "^0.2.5"
-anthropic = "^0.28.1"
+anthropic = "^0.40.0"
 sqlalchemy-mixins = "^2.0.5"
 python-magic = "^0.4.27"
 aiocache = "^0.12.2"
@@ -56,6 +57,8 @@ mistralai = "^1.5.0"
 tavily-python = "^0.5.1"
 greenlet = "^3.2.2"
 litellm = "^1.76.1"
+pandas = "^2.2.3"
+openpyxl = "^3.1.5"
 
 [tool.poetry.scripts]
 start = "src.intric.server.main:start"
@@ -74,8 +77,6 @@ pytest-env = "^1.1.3"
 vcrpy = "^5"
 testcontainers = "^4.8.1"
 pytest-dotenv = "^0.5.2"
-pandas = "^2.2.3"
-openpyxl = "^3.1.5"
 
 [build-system]
 requires = ["poetry-core"]

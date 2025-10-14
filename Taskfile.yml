@@ -3,22 +3,66 @@ version: '3'
 dotenv: [".env"]
 
 tasks:
-  run:
+  setup:
     cmds:
-      - poetry run start
+      - task: setup:backend
+      - task: setup:frontend
+
+  setup:backend:
     dir: ./backend
+    cmds:
+      - uv venv -p 3.11
+      - uv pip install -e .
+
+  setup:frontend:
+    dir: ./frontend
+    cmds:
+      - pnpm install
+
+  run:
+    dir: ./backend
+    cmds:
+      - env PYTHONPATH=./src .venv/bin/uvicorn intric.server.main:app --reload --port 8123 --loop asyncio
 
   worker:
-    cmds:
-      - LOGLEVEL=DEBUG arq src.intric.worker.arq.WorkerSettings
     dir: ./backend
+    cmds:
+      - env PYTHONPATH=./src LOGLEVEL=DEBUG .venv/bin/arq src.intric.worker.arq.WorkerSettings
 
   frontend:
     cmds:
-      - npm run dev
+      - pnpm run dev
     dir: ./frontend
 
   migrate:
     cmds:
-      - alembic upgrade head
+      - .venv/bin/alembic upgrade head
     dir: ./backend
+
+  init-db:
+    cmds:
+      - env PYTHONPATH=./src .venv/bin/python init_db.py
+    dir: ./backend
+
+  podman:up:
+    cmds:
+      - podman-compose -f compose.yml up -d
+
+  podman:down:
+    cmds:
+      - podman-compose -f compose.yml down {{.ARGS}}
+
+  reset-db:
+    desc: "Nukes the database and starts over (deletes volumes, restarts, migrates, and seeds)."
+    cmds:
+      - task: podman:down
+        vars: { ARGS: "-v" }
+      - |
+        echo "Forcefully removing data volumes..."
+        podman volume rm eneo_postgres_data eneo_redis_data || echo "Volumes not found or already removed."
+      - task: podman:up
+      - echo "Waiting 5 seconds for the database to initialize..."
+      - sleep 5
+      - task: migrate
+      - task: init-db
+      - echo "Database has been reset successfully."
