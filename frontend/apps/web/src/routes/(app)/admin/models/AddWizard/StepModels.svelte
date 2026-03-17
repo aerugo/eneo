@@ -151,6 +151,11 @@
   // Top 4 as quick suggestions (leaving room for "Browse all" chip)
   $: suggestions = allModels.slice(0, 4);
 
+  // Self-hosted providers have no static model list — LiteLLM can't provide defaults
+  $: isSelfHostedProvider = providerType !== ""
+    && providerType in capabilityProviders
+    && Object.keys(capabilityProviders[providerType]?.models ?? {}).length === 0;
+
   // Check if provider is known in LiteLLM but doesn't support this model type.
   // Unknown providers (e.g. vLLM, self-hosted) are not flagged — they can host any model type.
   $: providerHasNoSupport = providerType !== ""
@@ -169,8 +174,8 @@
     currentModel.name = info.name;
     currentModel.displayName = info.name;
     if (modelType === "completion") {
-      currentModel.maxInputTokens = info.max_input_tokens ?? 128000;
-      currentModel.maxOutputTokens = info.max_output_tokens ?? 4096;
+      currentModel.maxInputTokens = info.max_input_tokens;
+      currentModel.maxOutputTokens = info.max_output_tokens;
       currentModel.vision = info.supports_vision ?? false;
       currentModel.reasoning = info.supports_reasoning ?? false;
       currentModel.supportsToolCalling = info.supports_function_calling ?? false;
@@ -187,8 +192,8 @@
     return {
       name: "",
       displayName: "",
-      maxInputTokens: 128000,
-      maxOutputTokens: 4096,
+      maxInputTokens: undefined as number | undefined,
+      maxOutputTokens: undefined as number | undefined,
       vision: false,
       reasoning: false,
       supportsToolCalling: false,
@@ -250,8 +255,8 @@
     currentModel = {
       name: suggestion.name,
       displayName: suggestion.displayName,
-      maxInputTokens: suggestion.maxInputTokens ?? 128000,
-      maxOutputTokens: suggestion.maxOutputTokens ?? 4096,
+      maxInputTokens: suggestion.maxInputTokens,
+      maxOutputTokens: suggestion.maxOutputTokens,
       vision: suggestion.vision ?? false,
       reasoning: suggestion.reasoning ?? false,
       supportsToolCalling: suggestion.supportsToolCalling ?? false,
@@ -293,7 +298,9 @@
     }
   }
 
-  $: canAddModel = currentModel.name.trim() !== "" && currentModel.displayName.trim() !== "";
+  $: canAddModel = currentModel.name.trim() !== ""
+    && currentModel.displayName.trim() !== ""
+    && (modelType !== "completion" || (currentModel.maxInputTokens != null && currentModel.maxInputTokens > 0 && currentModel.maxOutputTokens != null && currentModel.maxOutputTokens > 0));
 
   function formatTokenLimit(limit: number): string {
     if (limit >= 1_000_000) return `${(limit / 1_000_000).toFixed(limit % 1_000_000 === 0 ? 0 : 1)}M`;
@@ -441,7 +448,7 @@
               ? m.model_identifier_placeholder_embedding()
               : m.model_identifier_placeholder_transcription()}
         />
-        {#if modelType === "completion" && currentModel.name.trim()}
+        {#if modelType === "completion" && currentModel.name.trim() && !isSelfHostedProvider}
           <button
             type="button"
             class="text-xs text-accent-default hover:text-accent-stronger transition-colors underline underline-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 self-start"
@@ -479,9 +486,11 @@
             id="max-input-tokens"
             type="number"
             bind:value={currentModel.maxInputTokens}
+            placeholder={m.max_input_tokens()}
             min="1024"
             max="10000000"
           />
+          <p class="text-xs text-muted">{m.token_reference_input()}</p>
         </div>
 
         <div class="flex flex-col gap-2">
@@ -493,15 +502,13 @@
             id="max-output-tokens"
             type="number"
             bind:value={currentModel.maxOutputTokens}
+            placeholder={m.max_output_tokens()}
             min="1"
             max="10000000"
           />
+          <p class="text-xs text-muted">{m.token_reference_output()}</p>
         </div>
       </div>
-
-      <p class="text-xs text-muted">
-        {m.effective_context({ tokens: formatTokenLimit(Math.max(0, (currentModel.maxInputTokens ?? 128000) - (currentModel.maxOutputTokens ?? 4096))) })}
-      </p>
 
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div class="flex items-center gap-6 col-span-3">
