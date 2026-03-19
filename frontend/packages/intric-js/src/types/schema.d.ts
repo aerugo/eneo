@@ -6153,6 +6153,8 @@ export interface components {
       metadata_json: {
         [key: string]: unknown;
       } | null;
+      /** Icon Id */
+      icon_id?: string | null;
     };
     /** GroupChatSparse */
     GroupChatSparse: {
@@ -6194,6 +6196,8 @@ export interface components {
       metadata_json: {
         [key: string]: unknown;
       } | null;
+      /** Icon Id */
+      icon_id?: string | null;
     };
     /** GroupChatTools */
     GroupChatTools: {
@@ -6233,6 +6237,11 @@ export interface components {
       metadata_json?: {
         [key: string]: unknown;
       } | null;
+      /**
+       * Icon Id
+       * @description Icon ID referencing an uploaded icon. Set to null to remove.
+       */
+      icon_id?: string | null;
     };
     /** GroupChatUpdateTools */
     GroupChatUpdateTools: {
