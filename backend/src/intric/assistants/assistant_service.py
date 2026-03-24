@@ -39,12 +39,10 @@ from intric.workflows.step_repo import StepRepository
 
 if TYPE_CHECKING:
     from intric.actors import ActorManager
-    from intric.ai_models.completion_models.completion_model import (
-        CompletionModel,
-        CompletionModelResponse,
-    )
+    from intric.ai_models.completion_models.completion_model import CompletionModelResponse
     from intric.assistants.references import ReferencesService
     from intric.completion_models.application import CompletionModelCRUDService
+    from intric.completion_models.domain.completion_model import CompletionModel
     from intric.completion_models.infrastructure.completion_service import (
         CompletionService,
     )
@@ -217,6 +215,13 @@ class AssistantService:
         template = await self.assistant_template_service.get_assistant_template(
             assistant_template_id=template_data.id
         )
+
+        if (
+            template.completion_model
+            and template.completion_model.id
+            and space.is_completion_model_in_space(template.completion_model.id)
+        ):
+            completion_model = space.get_completion_model(template.completion_model.id)
 
         # Validate incoming data
         template.validate_assistant_wizard_data(template_data=template_data)
