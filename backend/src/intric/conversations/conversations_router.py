@@ -16,16 +16,16 @@ from intric.audit.infrastructure.rate_limiting import (
     enforce_rate_limit,
 )
 from intric.conversations.conversation_models import ConversationRequest
+from intric.database.database import AsyncSession
+from intric.main.config import get_settings
+from intric.main.container.container import Container
+from intric.main.exceptions import NotFoundException
+from intric.main.logging import get_logger
+from intric.main.models import CursorPaginatedResponse
 from intric.mcp_servers.infrastructure.tool_approval import (
     ToolApprovalDecision,
     get_approval_manager,
 )
-from intric.database.database import AsyncSession
-from intric.main.container.container import Container
-from intric.main.config import get_settings
-from intric.main.exceptions import NotFoundException
-from intric.main.logging import get_logger
-from intric.main.models import CursorPaginatedResponse
 from intric.server.dependencies.container import get_container
 from intric.server.protocol import responses
 from intric.sessions.session import (
@@ -38,8 +38,8 @@ from intric.sessions.session import (
     SSEIntricEvent,
     SSEText,
     SSEToolApprovalRequired,
-    SSEToolCall,
     SSEToolApprovalTimeout,
+    SSEToolCall,
     ToolApprovalResponse,
 )
 from intric.sessions.session_protocol import (
@@ -53,9 +53,9 @@ router = APIRouter()
 
 
 def _raise_conversation_scope_denied(http_request: Request, message: str) -> NoReturn:
-    request_id = http_request.headers.get("x-correlation-id") or http_request.headers.get(
-        "x-request-id"
-    )
+    request_id = http_request.headers.get(
+        "x-correlation-id"
+    ) or http_request.headers.get("x-request-id")
     detail: dict[str, object] = {
         "code": "insufficient_scope",
         "message": message,
@@ -150,6 +150,7 @@ async def _validate_conversation_scope(
                 http_request, "Unable to verify API key scope for this session."
             )
 
+        assert session is not None
         if scope_type == "assistant":
             session_assistant_id = session.assistant.id if session.assistant else None
             if session_assistant_id != scope_id:
@@ -164,6 +165,7 @@ async def _validate_conversation_scope(
             # Resolve session to space via assistant or group_chat
             try:
                 space = await space_repo.get_space_by_session(session_id)
+                assert space is not None
                 if space.id != scope_id:
                     _raise_conversation_scope_denied(
                         http_request,
@@ -266,7 +268,9 @@ async def chat(
     request: ConversationRequest,
     http_request: Request,
     version: int = Query(default=1, ge=1, le=2),
-    container: Container = Depends(get_container(with_user=True, with_transaction=False)),
+    container: Container = Depends(
+        get_container(with_user=True, with_transaction=False)
+    ),
 ):
     """Unified endpoint for communicating with an assistant or a group chat.
 
@@ -354,7 +358,9 @@ async def chat(
 async def list_conversations(
     http_request: Request,
     assistant_id: Optional[UUID] = Query(None, description="The UUID of the assistant"),
-    group_chat_id: Optional[UUID] = Query(None, description="The UUID of the group chat"),
+    group_chat_id: Optional[UUID] = Query(
+        None, description="The UUID of the group chat"
+    ),
     limit: int = Query(default=None, gt=0),
     cursor: datetime = None,
     previous: bool = False,
@@ -454,10 +460,12 @@ async def delete_conversation(
     session_service = container.session_service()
     # Note: We'll need to determine if this is an assistant or group chat session
     session = await session_service.get_session_by_uuid(session_id)
+    assert session is not None
 
     if session.group_chat_id:
         await session_service.delete(session_id, group_chat_id=session.group_chat_id)
     else:
+        assert session.assistant is not None
         await session_service.delete(session_id, assistant_id=session.assistant.id)
 
     # Return None to produce 204 No Content response
@@ -479,6 +487,7 @@ async def leave_feedback(
 
     # Determine if this is a group chat or assistant session
     session = await session_service.get_session_by_uuid(session_id)
+    assert session is not None
 
     if session.group_chat_id:
         updated_session = await session_service.leave_feedback(
@@ -487,6 +496,7 @@ async def leave_feedback(
             feedback=feedback,
         )
     else:
+        assert session.assistant is not None
         updated_session = await session_service.leave_feedback(
             session_id=session_id, assistant_id=session.assistant.id, feedback=feedback
         )
@@ -516,7 +526,9 @@ async def set_title_of_conversation(
 )
 async def approve_tools(
     http_request: Request,
-    approval_id: UUID = Query(..., description="The approval ID from the tool_approval_required event"),
+    approval_id: UUID = Query(
+        ..., description="The approval ID from the tool_approval_required event"
+    ),
     decisions: list[ToolApprovalDecision] = Body(default_factory=list),
     container: Container = Depends(get_container(with_user=True)),
 ):
@@ -632,7 +644,9 @@ async def approve_tools(
     if submit_result.response_status != "already_processed":
         approved_count = sum(1 for decision in decisions if decision.approved)
         denied_count = sum(1 for decision in decisions if not decision.approved)
-        entity_id = context_result.context.assistant_id or context_result.context.session_id
+        entity_id = (
+            context_result.context.assistant_id or context_result.context.session_id
+        )
         entity_type = (
             EntityType.ASSISTANT
             if context_result.context.assistant_id

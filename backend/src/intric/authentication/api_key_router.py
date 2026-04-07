@@ -4,8 +4,8 @@ from datetime import datetime, timezone
 from typing import Any, Literal, cast
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 import sqlalchemy as sa
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from intric.authentication.api_key_lifecycle import ApiKeyLifecycleService
@@ -22,8 +22,8 @@ from intric.authentication.api_key_router_helpers import (
 from intric.authentication.api_key_v2_repo import ApiKeysV2Repository
 from intric.authentication.auth_dependencies import require_api_key_permission
 from intric.authentication.auth_models import (
-    ApiKeyCreateRequest,
     ApiKeyCreatedResponse,
+    ApiKeyCreateRequest,
     ApiKeyCreationConstraints,
     ApiKeyListResponse,
     ApiKeyNotificationPolicyResponse,
@@ -42,13 +42,13 @@ from intric.authentication.auth_models import (
     ApiKeyUsageResponse,
     ApiKeyV2,
     ApiKeyV2InDB,
-    ExpiringKeySummaryItem,
     ExpiringKeysSummary,
+    ExpiringKeySummaryItem,
 )
 from intric.database.tables.settings_table import Settings
 from intric.main.container.container import Container
-from intric.server.dependencies.container import get_container
 from intric.roles.permissions import Permission
+from intric.server.dependencies.container import get_container
 from intric.users.user import UserInDB
 
 router = APIRouter(tags=["API Keys"])
@@ -446,7 +446,10 @@ async def get_creation_constraints(
     tags=["API Keys"],
     summary="Get API key notification preferences",
     description="Get the caller's API key expiry notification preferences.",
-    responses={200: {"description": "Notification preferences."}, **error_responses([401, 429])},
+    responses={
+        200: {"description": "Notification preferences."},
+        **error_responses([401, 429]),
+    },
 )
 async def get_notification_preferences(
     container: Container = Depends(get_container(with_user=True)),
@@ -492,7 +495,9 @@ async def update_notification_preferences(
 
     merged_preferences = current_preferences.model_dump(mode="python")
     merged_preferences.update(request.model_dump(exclude_unset=True))
-    validated_preferences = ApiKeyNotificationPreferencesResponse.model_validate(merged_preferences)
+    validated_preferences = ApiKeyNotificationPreferencesResponse.model_validate(
+        merged_preferences
+    )
     updated_preferences = ApiKeyNotificationPreferencesResponse(
         enabled=validated_preferences.enabled and policy.enabled,
         days_before_expiry=_normalize_days_against_policy(
@@ -524,7 +529,10 @@ async def update_notification_preferences(
     tags=["API Keys"],
     summary="List API key notification subscriptions",
     description="List followed targets used for subscribed expiry notification mode.",
-    responses={200: {"description": "Notification subscriptions."}, **error_responses([401, 429])},
+    responses={
+        200: {"description": "Notification subscriptions."},
+        **error_responses([401, 429]),
+    },
 )
 async def list_notification_subscriptions(
     container: Container = Depends(get_container(with_user=True)),
@@ -610,7 +618,10 @@ async def upsert_notification_subscription(
     tags=["API Keys"],
     summary="Unfollow target for API key expiry notifications",
     description="Remove a followed API key/assistant/app/space target from subscribed notifications.",
-    responses={200: {"description": "Updated notification subscriptions."}, **error_responses([401, 429])},
+    responses={
+        200: {"description": "Updated notification subscriptions."},
+        **error_responses([401, 429]),
+    },
 )
 async def delete_notification_subscription(
     target_type: ApiKeyNotificationTargetType,
@@ -630,7 +641,8 @@ async def delete_notification_subscription(
         subscription
         for subscription in current_subscriptions
         if not (
-            subscription.target_type == target_type and subscription.target_id == target_id
+            subscription.target_type == target_type
+            and subscription.target_id == target_id
         )
     ]
 
@@ -825,10 +837,16 @@ async def get_api_key_usage(
 
     session = cast(AsyncSession, container.session())
     summary = await build_api_key_usage_summary(
-        session=session, tenant_id=user.tenant_id, key_id=id,
+        session=session,
+        tenant_id=user.tenant_id,
+        key_id=id,
     )
     usage_events, next_cursor = await build_api_key_usage_page(
-        session=session, tenant_id=user.tenant_id, key_id=id, limit=limit, cursor=cursor,
+        session=session,
+        tenant_id=user.tenant_id,
+        key_id=id,
+        limit=limit,
+        cursor=cursor,
     )
 
     return ApiKeyUsageResponse(

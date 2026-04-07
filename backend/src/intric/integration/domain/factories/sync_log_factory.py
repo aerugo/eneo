@@ -1,4 +1,3 @@
-
 from intric.database.tables.sync_log_table import SyncLog as SyncLogDBModel
 from intric.integration.domain.entities.sync_log import SyncLog
 
@@ -26,14 +25,16 @@ class SyncLogFactory:
     def to_db(entity: SyncLog) -> SyncLogDBModel:
         """Convert domain entity to database record."""
         return SyncLogDBModel(
-            id=entity.id,
-            created_at=entity.created_at,
-            updated_at=entity.updated_at,
-            integration_knowledge_id=entity.integration_knowledge_id,
-            sync_type=entity.sync_type,
-            status=entity.status,
-            error_message=entity.error_message,
-            sync_metadata=entity.metadata,
-            started_at=entity.started_at,
-            completed_at=entity.completed_at,
+            **dict(  # type: ignore[arg-type]
+                id=entity.id,
+                created_at=entity.created_at,
+                updated_at=entity.updated_at,
+                integration_knowledge_id=entity.integration_knowledge_id,
+                sync_type=entity.sync_type,
+                status=entity.status,
+                error_message=entity.error_message,
+                sync_metadata=entity.metadata,
+                started_at=entity.started_at,
+                completed_at=entity.completed_at,
+            )
         )

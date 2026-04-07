@@ -17,7 +17,7 @@ from intric.database.tables.users_table import Users
 
 
 class GroupChatsTable(BasePublic):
-    __tablename__ = "group_chats"
+    __tablename__ = "group_chats"  # type: ignore[assignment]
 
     name: Mapped[str] = mapped_column()
     allow_mentions: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -38,7 +38,9 @@ class GroupChatsTable(BasePublic):
 
     space_id: Mapped[UUID] = mapped_column(ForeignKey(Spaces.id, ondelete="CASCADE"))
     user_id: Mapped[UUID] = mapped_column(ForeignKey(Users.id, ondelete="CASCADE"))
-    group_chat_assistants: Mapped[list["GroupChatsAssistantsMapping"]] = relationship(viewonly=True)
+    group_chat_assistants: Mapped[list["GroupChatsAssistantsMapping"]] = relationship(
+        viewonly=True
+    )
 
 
 class GroupChatsAssistantsMapping(BaseCrossReference):

@@ -59,10 +59,10 @@ class ServiceRunner:
             model_kwargs=self.service.completion_model_kwargs,
         )
 
-        logger.debug(f"Service response: '{ai_response.completion.text}'")
+        logger.debug(f"Service response: '{ai_response.completion.text}'")  # type: ignore[union-attr]
 
         try:
-            output = self.output_parser.parse(ai_response.completion.text)
+            output = self.output_parser.parse(ai_response.completion.text)  # type: ignore[union-attr]
         except pydantic.ValidationError as e:
             raise PydanticParseError("Error parsing output.") from e
 
@@ -80,7 +80,11 @@ class ServiceRunner:
             num_tokens_answer = ai_response.usage.completion_tokens
             output_source = "provider"
         else:
-            model_name = self.service.completion_model.name if self.service.completion_model else ""
+            model_name = (
+                self.service.completion_model.name
+                if self.service.completion_model
+                else ""
+            )
             num_tokens_answer = count_tokens(answer, model_name)
             output_source = "litellm"
 
@@ -91,6 +95,7 @@ class ServiceRunner:
         )
 
         # Save
+        assert self.service.completion_model is not None
         question = QuestionAdd(
             tenant_id=self.user.tenant_id,
             question=input,

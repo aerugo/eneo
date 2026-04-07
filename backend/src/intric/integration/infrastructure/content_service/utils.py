@@ -7,6 +7,7 @@ import re
 import zipfile
 from logging import getLogger
 from typing import Dict, Optional, Tuple
+
 import pandas as pd
 
 logger = getLogger(__name__)
@@ -200,9 +201,9 @@ def extract_text_from_pptx(
                     # Process each shape
                     for shape in slide.shapes:
                         # Extract text from text frames
-                        if hasattr(shape, "text") and shape.text.strip():
+                        if hasattr(shape, "text") and shape.text.strip():  # type: ignore[attr-defined]
                             # Skip template placeholders
-                            text = shape.text.strip()
+                            text = shape.text.strip()  # type: ignore[attr-defined]
 
                             # Skip common placeholders and formatting text
                             skip_phrases = [
@@ -334,15 +335,15 @@ def extract_text_from_pdf(binary_data: bytes) -> str:
 
     try:
         with pdfplumber.open(io.BytesIO(binary_data)) as pdf:
-            extracted_text = " ".join(
-                page.extract_text() or "" for page in pdf.pages
-            )
+            extracted_text = " ".join(page.extract_text() or "" for page in pdf.pages)
 
         # Remove null bytes (cause PostgreSQL UTF-8 encoding errors)
         sanitized = extracted_text.replace("\x00", "")
 
         if not sanitized.strip():
-            logger.warning("No text extracted from PDF - file may be image-only or scanned")
+            logger.warning(
+                "No text extracted from PDF - file may be image-only or scanned"
+            )
 
         return sanitized
 

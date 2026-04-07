@@ -78,15 +78,19 @@ class GroupChatService:
                 },
             )
 
-        group_chat = GroupChat.create(name=name, space_id=space_id, user_id=self.user.id)
+        group_chat = GroupChat.create(
+            name=name, space_id=space_id, user_id=self.user.id
+        )
 
         space.add_group_chat(group_chat)
         updated_space = await self.space_repo.update(space=space)
 
         return updated_space.get_group_chat(group_chat_id=group_chat.id)
 
-    async def delete_group_chat(self, group_chat_id: "UUID") -> "GroupChat":
-        space = await self.space_service.get_space_by_group_chat(group_chat_id=group_chat_id)
+    async def delete_group_chat(self, group_chat_id: "UUID") -> "GroupChat | None":
+        space = await self.space_service.get_space_by_group_chat(
+            group_chat_id=group_chat_id
+        )
         actor = self.actor_manager.get_space_actor_from_space(space)
 
         if not actor.can_delete_group_chats():
@@ -180,7 +184,9 @@ class GroupChatService:
         self,
         group_chat_id: "UUID",
     ) -> "GroupChat":
-        space = await self.space_service.get_space_by_group_chat(group_chat_id=group_chat_id)
+        space = await self.space_service.get_space_by_group_chat(
+            group_chat_id=group_chat_id
+        )
         actor = self.actor_manager.get_space_actor_from_space(space)
         group_chat = space.get_group_chat(group_chat_id=group_chat_id)
 
@@ -199,7 +205,9 @@ class GroupChatService:
 
         return group_chat
 
-    async def _find_suitable_completion_model(self, assistants: list[GroupChatAssistant]):
+    async def _find_suitable_completion_model(
+        self, assistants: list[GroupChatAssistant]
+    ):
         """Return the completion model of the first assistant in the list"""
         if not assistants:
             raise BadRequestException("No assistants in the group chat")
@@ -247,7 +255,9 @@ class GroupChatService:
                 Take earlier questions in the context into account.
                 """
 
-    def _is_match(self, response_text: str, assistants: list[GroupChatAssistant]) -> int | None:
+    def _is_match(
+        self, response_text: str, assistants: list[GroupChatAssistant]
+    ) -> int | None:
         """Parse the model's response to determine which assistant to use"""
         response_text = response_text.strip().upper()
 
@@ -264,7 +274,7 @@ class GroupChatService:
         question: str,
         assistants: list[GroupChatAssistant],
         session: Optional["SessionInDB"] = None,
-    ) -> GroupChatAssistantSelectionResult:
+    ) -> GroupChatAssistantSelectionResult | None:
         """Select the most appropriate assistant using a completion model to analyze the question"""
 
         # if no assistants, no need for completion model
@@ -294,20 +304,20 @@ class GroupChatService:
         )
         # parse the response to determine which assistant to use
         assistant_match = self._is_match(
-            response.completion.text,
+            response.completion.text,  # type: ignore[union-attr]
             assistants,
         )
         if assistant_match:
             if 1 <= assistant_match <= len(assistants):
                 return GroupChatAssistantSelectionResult(
                     assistant=assistants[assistant_match - 1],
-                    response_str=response.completion.text,
+                    response_str=response.completion.text,  # type: ignore[union-attr]
                     assistant_selector_tokens=assistant_selector_tokens,
                 )
         else:
             return GroupChatAssistantSelectionResult(
                 assistant=None,
-                response_str=response.completion.text,
+                response_str=response.completion.text,  # type: ignore[union-attr]
                 assistant_selector_tokens=assistant_selector_tokens,
             )
 
@@ -348,7 +358,8 @@ class GroupChatService:
                 await self.session_service.add_question_to_session(
                     question=question,
                     answer=response,
-                    num_tokens_question=question_token_count + assistant_selector_tokens,
+                    num_tokens_question=question_token_count
+                    + assistant_selector_tokens,
                     num_tokens_answer=token_count,
                     session=session,
                     completion_model=completion_model,
@@ -419,7 +430,9 @@ class GroupChatService:
                 assistant.assistant.id for assistant in group_chat.assistants
             ]
             if tool_assistant_id not in group_chat_assistant_ids:
-                raise BadRequestException("The specified assistant is not part of this group chat")
+                raise BadRequestException(
+                    "The specified assistant is not part of this group chat"
+                )
 
             assistant_to_ask = tool_assistant_id
         else:
@@ -428,6 +441,7 @@ class GroupChatService:
             selection_result = await self._select_assistant_with_completion_model(
                 question, group_chat.assistants, session
             )
+            assert selection_result is not None
             response_from_selector = selection_result.response_str
             if selection_result.assistant:
                 assistant_to_ask = selection_result.assistant.assistant.id
@@ -435,6 +449,7 @@ class GroupChatService:
                 assistant_to_ask = None
 
         if assistant_to_ask is None:
+            assert selection_result is not None
             final_response = await self._handle_response(
                 response=response_from_selector,
                 question=question,
@@ -471,15 +486,20 @@ class GroupChatService:
             # ensure the response tools contain which assistant answered
             # get the assistant name for the handle
             selected_assistant = group_chat.get_assistant_by_id(assistant_to_ask)
+            assert selected_assistant is not None
             assistant_name = selected_assistant.assistant.name
 
             # set assistant info in tools
-            response.tools.assistants = [ToolAssistant(id=assistant_to_ask, handle=assistant_name)]
+            response.tools.assistants = [
+                ToolAssistant(id=assistant_to_ask, handle=assistant_name)
+            ]
 
         return response
 
     async def publish_group_chat(self, group_chat_id: "UUID", publish: bool):
-        space = await self.space_repo.get_space_by_group_chat(group_chat_id=group_chat_id)
+        space = await self.space_repo.get_space_by_group_chat(
+            group_chat_id=group_chat_id
+        )
         actor = self.actor_manager.get_space_actor_from_space(space=space)
 
         if not actor.can_publish_group_chats():

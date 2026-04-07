@@ -2,9 +2,9 @@ from typing import Annotated, NoReturn, cast
 from uuid import UUID
 
 from dependency_injector import providers
-
 from fastapi import Depends, Request, Security, WebSocketException
 
+from intric.authentication.api_key_resolver import ApiKeyValidationError
 from intric.authentication.api_key_router_helpers import raise_api_key_http_error
 from intric.database.database import (
     AsyncSession,
@@ -14,13 +14,13 @@ from intric.database.database import (
 )
 from intric.main.container.container import Container
 from intric.main.container.container_overrides import override_user
-from intric.authentication.api_key_resolver import ApiKeyValidationError
 from intric.server.dependencies.auth_definitions import (
     API_KEY_HEADER,
     OAUTH2_SCHEME,
     get_token_from_websocket_header,
 )
 from intric.users.setup import setup_user
+
 
 def _raise_api_key_http_error(
     exc: ApiKeyValidationError,
@@ -90,15 +90,15 @@ def get_container(
         try:
             session = cast(AsyncSession, container.session())
             if session.in_transaction():
-                user = await container.user_service().authenticate_with_assistant_api_key(
-                    token=token, api_key=api_key, assistant_id=id, request=request
+                user = (
+                    await container.user_service().authenticate_with_assistant_api_key(
+                        token=token, api_key=api_key, assistant_id=id, request=request
+                    )
                 )
             else:
                 async with session.begin():
-                    user = (
-                        await container.user_service().authenticate_with_assistant_api_key(
-                            token=token, api_key=api_key, assistant_id=id, request=request
-                        )
+                    user = await container.user_service().authenticate_with_assistant_api_key(
+                        token=token, api_key=api_key, assistant_id=id, request=request
                     )
         except ApiKeyValidationError as exc:
             _raise_api_key_http_error(exc, request=request)

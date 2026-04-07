@@ -15,7 +15,7 @@ from intric.files.text import TextMimeTypes
 from intric.files.transcriber import Transcriber
 from intric.main.exceptions import BadRequestException
 from intric.main.logging import get_logger
-from intric.main.models import NOT_PROVIDED, NotProvided
+from intric.main.models import NOT_PROVIDED, NotProvided, is_provided
 from intric.prompts.prompt import Prompt
 from intric.templates.app_template.app_template import AppTemplate
 
@@ -131,10 +131,15 @@ class App:
     @input_fields.setter
     def input_fields(self, input_fields: list[InputField]):
         if len(input_fields) > 1:
-            raise BadRequestException(f"A {self.__class__.__name__} can only have one input.")
+            raise BadRequestException(
+                f"A {self.__class__.__name__} can only have one input."
+            )
 
         for input_field in input_fields:
-            if input_field.type == InputFieldType.IMAGE_UPLOAD and not self.completion_model.vision:
+            if (
+                input_field.type == InputFieldType.IMAGE_UPLOAD
+                and not self.completion_model.vision
+            ):
                 raise BadRequestException(
                     "Need to have a vision model enabled in order to specify image upload"
                 )
@@ -198,10 +203,10 @@ class App:
         if published is not None:
             self.published = published
 
-        if data_retention_days is not NOT_PROVIDED:
+        if is_provided(data_retention_days):
             self.data_retention_days = data_retention_days
 
-        if icon_id is not NOT_PROVIDED:
+        if is_provided(icon_id):
             self.icon_id = icon_id
 
     def is_valid_input(self, files: list[FileInfo], text: str | None = None):
@@ -220,7 +225,10 @@ class App:
                     return False
 
                 # Check if there are audio files that require a transcription model
-                if AudioMimeTypes.has_value(file.mimetype) and not self.transcription_model:
+                if (
+                    AudioMimeTypes.has_value(file.mimetype)
+                    and not self.transcription_model
+                ):
                     return False
 
             total_size = sum(file.size for file in files)
@@ -255,15 +263,20 @@ class App:
         if text is None:
             text = ""
 
-        audio_files = [file for file in files if AudioMimeTypes.has_value(file.mimetype)]
+        audio_files = [
+            file for file in files if AudioMimeTypes.has_value(file.mimetype)
+        ]
 
         transcriptions = [
-            await transcriber.transcribe(file, self.transcription_model) for file in audio_files
+            await transcriber.transcribe(file, self.transcription_model)
+            for file in audio_files
         ]
 
         text_files = [file for file in files if TextMimeTypes.has_value(file.mimetype)]
 
-        image_files = [file for file in files if ImageMimeTypes.has_value(file.mimetype)]
+        image_files = [
+            file for file in files if ImageMimeTypes.has_value(file.mimetype)
+        ]
 
         return await completion_service.get_response(
             text_input=text,

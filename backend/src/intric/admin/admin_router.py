@@ -2,8 +2,8 @@ from datetime import datetime, timezone
 from typing import List, cast
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 import sqlalchemy as sa
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from intric.admin.admin_models import (
@@ -14,23 +14,11 @@ from intric.admin.admin_models import (
     UserDeletedListItem,
     UserStateListItem,
 )
-from intric.main.container.container import Container
-from intric.main.config import get_settings
-from intric.main.exceptions import BadRequestException
-from intric.main.logging import get_logger
-from intric.main.models import DeleteResponse
-from intric.predefined_roles.predefined_role import PredefinedRoleInDB
-from intric.database.tables.users_table import Users
-from intric.server.dependencies.container import get_container
-from intric.tenants.tenant import TenantPublic
-from intric.users.user import (
-    SortField,
-    SortOrder,
-    UserAddAdmin,
-    UserAdminView,
-    UserCreatedAdminView,
-    UserUpdatePublic,
-)
+
+# Audit logging - module level imports for consistency
+from intric.audit.application.audit_metadata import AuditMetadata
+from intric.audit.domain.action_types import ActionType
+from intric.audit.domain.entity_types import EntityType
 from intric.authentication.api_key_lifecycle import ApiKeyLifecycleService
 from intric.authentication.api_key_resolver import ApiKeyValidationError
 from intric.authentication.api_key_router import _build_expiring_summary
@@ -53,8 +41,8 @@ from intric.authentication.auth_models import (
     ApiKeyPermission,
     ApiKeyPolicyResponse,
     ApiKeyPolicyUpdate,
-    ApiKeySearchMatchReason,
     ApiKeyScopeType,
+    ApiKeySearchMatchReason,
     ApiKeyState,
     ApiKeyStateChangeRequest,
     ApiKeyType,
@@ -66,12 +54,23 @@ from intric.authentication.auth_models import (
     ExpiringKeysSummary,
     SuperApiKeyStatus,
 )
-from intric.main.models import CursorPaginatedResponse
-
-# Audit logging - module level imports for consistency
-from intric.audit.application.audit_metadata import AuditMetadata
-from intric.audit.domain.action_types import ActionType
-from intric.audit.domain.entity_types import EntityType
+from intric.database.tables.users_table import Users
+from intric.main.config import get_settings
+from intric.main.container.container import Container
+from intric.main.exceptions import BadRequestException
+from intric.main.logging import get_logger
+from intric.main.models import CursorPaginatedResponse, DeleteResponse
+from intric.predefined_roles.predefined_role import PredefinedRoleInDB
+from intric.server.dependencies.container import get_container
+from intric.tenants.tenant import TenantPublic
+from intric.users.user import (
+    SortField,
+    SortOrder,
+    UserAddAdmin,
+    UserAdminView,
+    UserCreatedAdminView,
+    UserUpdatePublic,
+)
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -329,8 +328,9 @@ async def register_user(
 
     # Add role information from the input request
     if new_user.predefined_roles:
-        from intric.database.tables.roles_table import PredefinedRoles
         import sqlalchemy as sa
+
+        from intric.database.tables.roles_table import PredefinedRoles
 
         session = cast(AsyncSession, container.session())
         role_ids = [role.id for role in new_user.predefined_roles]
@@ -349,8 +349,9 @@ async def register_user(
 
     # Add custom roles if any
     if new_user.roles:
-        from intric.database.tables.roles_table import Roles
         import sqlalchemy as sa
+
+        from intric.database.tables.roles_table import Roles
 
         session = cast(AsyncSession, container.session())
         custom_role_ids = [role.id for role in new_user.roles]
@@ -1086,7 +1087,9 @@ _ADMIN_ROTATED_RESPONSE_EXAMPLE = {
 }
 
 
-def _build_search_match_reasons(key: ApiKeyV2, search: str | None) -> list[ApiKeySearchMatchReason]:
+def _build_search_match_reasons(
+    key: ApiKeyV2, search: str | None
+) -> list[ApiKeySearchMatchReason]:
     if not search:
         return []
 
@@ -1179,8 +1182,6 @@ async def _enrich_api_keys_with_user_snapshots(
         enriched.append(updated)
 
     return enriched
-
-
 
 
 @router.get(
@@ -1294,7 +1295,10 @@ async def update_api_key_policy(
     tags=["Admin API Keys"],
     summary="Get API key notification policy",
     description="Get tenant API key notification policy settings.",
-    responses={200: {"description": "Current notification policy."}, **error_responses([401, 403, 429])},
+    responses={
+        200: {"description": "Current notification policy."},
+        **error_responses([401, 403, 429]),
+    },
 )
 async def get_api_key_notification_policy(
     container: Container = Depends(get_container(with_user=True)),
@@ -1303,9 +1307,15 @@ async def get_api_key_notification_policy(
     await admin_service.validate_admin_permission()
 
     user = container.user()
-    tenant_policy = user.tenant.api_key_policy if isinstance(user.tenant.api_key_policy, dict) else {}
+    tenant_policy = (
+        user.tenant.api_key_policy
+        if isinstance(user.tenant.api_key_policy, dict)
+        else {}
+    )
     notification_policy = tenant_policy.get("notification_policy")
-    notification_policy = notification_policy if isinstance(notification_policy, dict) else {}
+    notification_policy = (
+        notification_policy if isinstance(notification_policy, dict) else {}
+    )
     return ApiKeyNotificationPolicyResponse.model_validate(notification_policy)
 
 
@@ -1315,7 +1325,10 @@ async def get_api_key_notification_policy(
     tags=["Admin API Keys"],
     summary="Update API key notification policy",
     description="Update tenant API key notification policy under api_key_policy.notification_policy.",
-    responses={200: {"description": "Updated notification policy."}, **error_responses([400, 401, 403, 429])},
+    responses={
+        200: {"description": "Updated notification policy."},
+        **error_responses([400, 401, 403, 429]),
+    },
 )
 async def update_api_key_notification_policy(
     request: ApiKeyNotificationPolicyUpdate = Body(
@@ -1330,14 +1343,22 @@ async def update_api_key_notification_policy(
     await admin_service.validate_admin_permission()
 
     updates = request.model_dump(exclude_unset=True)
-    tenant_policy = user.tenant.api_key_policy if isinstance(user.tenant.api_key_policy, dict) else {}
+    tenant_policy = (
+        user.tenant.api_key_policy
+        if isinstance(user.tenant.api_key_policy, dict)
+        else {}
+    )
     current_notification_policy = tenant_policy.get("notification_policy")
     current_notification_policy = (
-        current_notification_policy if isinstance(current_notification_policy, dict) else {}
+        current_notification_policy
+        if isinstance(current_notification_policy, dict)
+        else {}
     )
 
     if not updates:
-        return ApiKeyNotificationPolicyResponse.model_validate(current_notification_policy)
+        return ApiKeyNotificationPolicyResponse.model_validate(
+            current_notification_policy
+        )
 
     merged_notification_policy = dict(current_notification_policy)
     merged_notification_policy.update(updates)
@@ -1352,7 +1373,9 @@ async def update_api_key_notification_policy(
         {"notification_policy": normalized_policy.model_dump(mode="json")},
     )
     after_policy = (
-        updated_tenant.api_key_policy if isinstance(updated_tenant.api_key_policy, dict) else {}
+        updated_tenant.api_key_policy
+        if isinstance(updated_tenant.api_key_policy, dict)
+        else {}
     )
 
     audit_service = container.audit_service()
@@ -1645,10 +1668,16 @@ async def get_api_key_usage_admin(
     session = cast(AsyncSession, container.session())
     tenant_id = admin_service.user.tenant_id
     summary = await build_api_key_usage_summary(
-        session=session, tenant_id=tenant_id, key_id=id,
+        session=session,
+        tenant_id=tenant_id,
+        key_id=id,
     )
     usage_events, next_cursor = await build_api_key_usage_page(
-        session=session, tenant_id=tenant_id, key_id=id, limit=limit, cursor=cursor,
+        session=session,
+        tenant_id=tenant_id,
+        key_id=id,
+        limit=limit,
+        cursor=cursor,
     )
 
     return ApiKeyUsageResponse(

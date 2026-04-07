@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional, Union
 
 from intric.base.base_entity import Entity
-from intric.main.models import NOT_PROVIDED, NotProvided
+from intric.main.models import NOT_PROVIDED, NotProvided, is_provided
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -104,7 +104,9 @@ class GroupChat(Entity):
 
     def get_assistant_by_id(self, assistant_id: "UUID") -> Optional[GroupChatAssistant]:
         """Get an assistant in this group chat by ID"""
-        return next((a for a in self.assistants if a.assistant.id == assistant_id), None)
+        return next(
+            (a for a in self.assistants if a.assistant.id == assistant_id), None
+        )
 
     def get_assistants(self):
         return [assistant.assistant for assistant in self.assistants]
@@ -132,9 +134,9 @@ class GroupChat(Entity):
             self.assistants = new_assistants
         if insight_enabled is not None:
             self.insight_enabled = insight_enabled
-        if metadata_json is not NOT_PROVIDED:
+        if is_provided(metadata_json):
             self.metadata_json = metadata_json
-        if icon_id is not NOT_PROVIDED:
+        if is_provided(icon_id):
             self.icon_id = icon_id
 
         return self

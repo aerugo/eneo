@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
 
-
 from pydantic import Field, computed_field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -267,9 +266,7 @@ class Settings(BaseSettings):
         20  # Base pool size (permanent connections) - default: current behavior
     )
     db_pool_max_overflow: int = 10  # Extra connections above pool_size (total max = 30)
-    db_pool_timeout: int = (
-        30  # Seconds to wait for connection before raising error - default: SQLAlchemy default
-    )
+    db_pool_timeout: int = 30  # Seconds to wait for connection before raising error - default: SQLAlchemy default
     db_pool_pre_ping: bool = (
         True  # Verify connections before use - prevents stale connection errors
     )
@@ -530,9 +527,7 @@ class Settings(BaseSettings):
         - FEDERATION_ENABLED=true (tenant-specific IdPs)
         - Worker/crawler HTTP authentication
         """
-        encryption_required = (
-            self.tenant_credentials_enabled or self.federation_enabled
-        )
+        encryption_required = self.tenant_credentials_enabled or self.federation_enabled
 
         if encryption_required:
             if not self.encryption_key or not self.encryption_key.strip():

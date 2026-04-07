@@ -1,33 +1,37 @@
-from typing import Optional, cast
-from uuid import UUID, uuid4
 import json
 import secrets
 import time
 import traceback
+from typing import Optional, cast
 from urllib.parse import urlparse
+from uuid import UUID, uuid4
 
 import aiohttp
 import jwt
 from fastapi import APIRouter, Depends, Query, Request, status
-from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import ValidationError
+from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.exceptions import HTTPException
 
+# Audit logging - module level imports for consistency
+from intric.audit.application.audit_metadata import AuditMetadata
+from intric.audit.domain.action_types import ActionType
+from intric.audit.domain.entity_types import EntityType
 from intric.authentication import auth_dependencies
-from intric.roles.permissions import Permission, validate_permission
 from intric.authentication.api_key_router_helpers import (
     error_responses as api_key_error_responses,
 )
 from intric.authentication.auth_models import AccessToken, ApiKey, OpenIdConnectLogin
 from intric.main import config
-from intric.main.config import validate_public_origin
-from intric.main.exceptions import AuthenticationException
 from intric.main.aiohttp_client import aiohttp_client
+from intric.main.config import validate_public_origin
 from intric.main.container.container import Container
+from intric.main.exceptions import AuthenticationException
 from intric.main.logging import get_logger
 from intric.main.models import CursorPaginatedResponse
 from intric.main.request_context import set_request_context
+from intric.roles.permissions import Permission, validate_permission
 from intric.server.dependencies.container import get_container
 from intric.server.protocol import responses
 from intric.tenants.tenant import TenantPublic
@@ -42,11 +46,6 @@ from intric.users.user import (
     UserSparse,
     UserUpdatePublic,
 )
-
-# Audit logging - module level imports for consistency
-from intric.audit.application.audit_metadata import AuditMetadata
-from intric.audit.domain.action_types import ActionType
-from intric.audit.domain.entity_types import EntityType
 
 logger = get_logger(__name__)
 
@@ -160,7 +159,9 @@ async def _resolve_single_tenant_redirect_uri(
         else ""
     )
     canonical_origin = (
-        f"{parsed_redirect.scheme}://{parsed_redirect.hostname}{parsed_port}".rstrip("/")
+        f"{parsed_redirect.scheme}://{parsed_redirect.hostname}{parsed_port}".rstrip(
+            "/"
+        )
     )
     if normalized_request_origin == canonical_origin:
         return redirect_uri
@@ -715,9 +716,7 @@ async def get_currently_authenticated_user(
     if truncated_key is None and current_user.api_key is not None:
         truncated_key = current_user.api_key.truncated_key
     legacy_suffix = (
-        current_user.api_key.truncated_key
-        if current_user.api_key is not None
-        else None
+        current_user.api_key.truncated_key if current_user.api_key is not None else None
     )
     return UserPublic(
         **current_user.model_dump(),
@@ -860,7 +859,9 @@ async def get_current_user_tenant(
     return TenantPublic(**tenant.model_dump())
 
 
-@users_admin_router.post("/admin/invite/", response_model=UserAdminView, status_code=201)
+@users_admin_router.post(
+    "/admin/invite/", response_model=UserAdminView, status_code=201
+)
 async def invite_user(
     user_invite: PropUserInvite,
     container: Container = Depends(get_container(with_user=True)),
@@ -888,8 +889,9 @@ async def invite_user(
 
     # Fetch predefined role details if role was assigned
     if user_invite.predefined_role:
-        from intric.database.tables.roles_table import PredefinedRoles
         import sqlalchemy as sa
+
+        from intric.database.tables.roles_table import PredefinedRoles
 
         # Query for the predefined role details
         role_query = sa.select(PredefinedRoles).where(

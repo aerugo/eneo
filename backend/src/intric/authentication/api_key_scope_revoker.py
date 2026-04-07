@@ -9,9 +9,9 @@ from intric.audit.domain.action_types import ActionType
 from intric.audit.domain.entity_types import EntityType
 from intric.authentication.api_key_v2_repo import ApiKeysV2Repository
 from intric.authentication.auth_models import (
+    ApiKeyScopeType,
     ApiKeyState,
     ApiKeyStateReasonCode,
-    ApiKeyScopeType,
     ApiKeyV2InDB,
 )
 from intric.main.logging import get_logger
@@ -202,7 +202,7 @@ class ApiKeyScopeRevoker:
         all_keys.extend(space_keys)
 
         # Assistant-scoped keys
-        for asst_id in (assistant_ids or []):
+        for asst_id in assistant_ids or []:
             asst_keys = await self.api_key_repo.list_filtered(
                 tenant_id=tenant_id,
                 scope_type=ApiKeyScopeType.ASSISTANT,
@@ -214,7 +214,7 @@ class ApiKeyScopeRevoker:
             all_keys.extend(asst_keys)
 
         # App-scoped keys
-        for app_id in (app_ids or []):
+        for app_id in app_ids or []:
             app_keys = await self.api_key_repo.list_filtered(
                 tenant_id=tenant_id,
                 scope_type=ApiKeyScopeType.APP,

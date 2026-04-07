@@ -40,7 +40,7 @@ class SecurityClassificationRepoImpl(BaseRepository):
         result = await self.session.scalars(query)
         records = result.all()
 
-        return [
+        return [  # type: ignore[return-value]
             SecurityClassification.to_domain(db_security_classification=record)
             for record in records
         ]
@@ -93,9 +93,9 @@ class SecurityClassificationRepoImpl(BaseRepository):
     async def update(
         self, security_classification: SecurityClassification
     ) -> SecurityClassification:
-        assert (
-            security_classification.id is not None
-        ), "Security classification must have an ID to update"
+        assert security_classification.id is not None, (
+            "Security classification must have an ID to update"
+        )
 
         # Convert domain entity to db values
         values = {

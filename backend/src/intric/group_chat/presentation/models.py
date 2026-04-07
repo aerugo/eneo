@@ -32,7 +32,7 @@ class GroupChatCreate(BaseModel):
 
 class GroupChatAssistantUpdateSchema(BaseModel):
     id: UUID
-    user_description: Optional[str] = Field(
+    user_description: Optional[str] = Field(  # type: ignore[call-overload]
         description=(
             "Custom description provided by the user. "
             "Cannot be null if 'description' of assistant is null."
@@ -70,7 +70,7 @@ class GroupChatUpdateSchema(BaseModel):
             "appropriate permissions can see all sessions for this group chat."
         ),
     )
-    metadata_json: Optional[dict] = Field(
+    metadata_json: Optional[dict] = Field(  # type: ignore[assignment]
         default=NOT_PROVIDED,
         description="Metadata for the group chat.",
     )
@@ -100,7 +100,9 @@ class GroupChatAssistantPublic(ToolAssistant):
     @model_validator(mode="after")
     def validate_descriptions(self) -> "GroupChatAssistantPublic":
         if self.default_description is None and self.user_description is None:
-            raise ValueError("Both default_description and user_description cannot be null")
+            raise ValueError(
+                "Both default_description and user_description cannot be null"
+            )
         return self
 
 

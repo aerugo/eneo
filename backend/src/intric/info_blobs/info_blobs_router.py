@@ -1,6 +1,9 @@
 from fastapi import APIRouter, Depends, Path, Request
 
-from intric.authentication.auth_dependencies import get_current_active_user, get_scope_filter
+from intric.authentication.auth_dependencies import (
+    get_current_active_user,
+    get_scope_filter,
+)
 from intric.info_blobs.info_blob import (
     InfoBlobPublic,
     InfoBlobPublicNoText,
@@ -101,6 +104,7 @@ async def delete_info_blob(
     service = container.info_blob_service()
     group_service = container.group_service()
     info_blob_deleted = await service.delete(id)
+    assert info_blob_deleted is not None
 
     # Update group size
     if info_blob_deleted.group_id is not None:
@@ -119,4 +123,6 @@ async def get_space_info_blobs(
 ):
     service = container.info_blob_service()
     blobs = await service.get_for_space(space_id)
-    return protocol.to_paginated_response([to_info_blob_public_no_text(b) for b in blobs])
+    return protocol.to_paginated_response(
+        [to_info_blob_public_no_text(b) for b in blobs]
+    )

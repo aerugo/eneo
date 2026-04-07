@@ -23,9 +23,11 @@ def get_service_runner(
     with_groups: list[Group] = None,
 ):
     if with_groups is not None:
-        service.groups = with_groups
+        service.groups = with_groups  # type: ignore[assignment]
 
     output_parser = OutputParserFactory.create(service)
     prompt = f"{service.prompt}\n{output_parser.get_format_instructions()}"
 
-    return container.service_runner(service=service, output_parser=output_parser, prompt=prompt)
+    return container.service_runner(
+        service=service, output_parser=output_parser, prompt=prompt
+    )

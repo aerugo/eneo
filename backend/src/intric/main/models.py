@@ -14,6 +14,7 @@ from pydantic import (
 )
 from pydantic.fields import FieldInfo
 from pydantic_core import core_schema
+from typing_extensions import TypeIs
 
 from intric.main.exceptions import ErrorCodes
 
@@ -44,8 +45,21 @@ class NotProvided:
 NOT_PROVIDED = NotProvided()
 
 
+_T_NP = TypeVar("_T_NP")
+
+
+def is_provided(value: _T_NP | NotProvided) -> TypeIs[_T_NP]:
+    """Check if a value was provided (is not the NOT_PROVIDED sentinel).
+
+    Use this instead of ``value is not NOT_PROVIDED`` so that pyright
+    can narrow ``T | NotProvided`` to ``T`` in the true branch.
+    """
+    return not isinstance(value, NotProvided)
+
+
 class MCPToolSetting(BaseModel):
     """MCP server tool enablement setting."""
+
     tool_id: UUID
     is_enabled: bool
 
@@ -69,7 +83,9 @@ def partial_model(model: Type[_M]) -> Type[_M]:
     ) -> Tuple[Any, FieldInfo]:
         new = deepcopy(field)
         new.default = default
-        new.default_factory = None  # Clear default_factory to avoid conflict with default
+        new.default_factory = (
+            None  # Clear default_factory to avoid conflict with default
+        )
         new.annotation = Optional[field.annotation]  # type: ignore
         return new.annotation, new
 

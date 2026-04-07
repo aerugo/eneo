@@ -45,15 +45,19 @@ class AIModelsService:
         self,
         model: CompletionModel | EmbeddingModelLegacy,
     ):
-        if not self._is_locked(model) and not model.is_deprecated and model.is_org_enabled:
+        if (
+            not self._is_locked(model)
+            and not model.is_deprecated
+            and model.is_org_enabled
+        ):
             return True
 
         return False
 
     def _get_latest_available_model(
         self, models: list[CompletionModelPublic | EmbeddingModelPublicLegacy]
-    ) -> CompletionModelPublic | EmbeddingModelPublicLegacy:
-        sorted_models = sorted(models, key=lambda model: model.created_at, reverse=True)
+    ) -> CompletionModelPublic | EmbeddingModelPublicLegacy | None:
+        sorted_models = sorted(models, key=lambda model: model.created_at, reverse=True)  # type: ignore[call-overload]
 
         for model in sorted_models:
             if model.can_access:
@@ -79,14 +83,20 @@ class AIModelsService:
         return models
 
     async def get_embedding_model(self, id: UUID):
-        model = await self.embedding_model_repo.get_model(id, tenant_id=self.user.tenant_id)
+        model = await self.embedding_model_repo.get_model(
+            id, tenant_id=self.user.tenant_id
+        )
 
         if model.is_deprecated:
-            raise BadRequestException(f"EmbeddingModel {model.name} not supported anymore.")
+            raise BadRequestException(
+                f"EmbeddingModel {model.name} not supported anymore."
+            )
 
         can_access = self._can_access(model)
         if not can_access:
-            raise UnauthorizedException("Unauthorized. User has no permissions to access.")
+            raise UnauthorizedException(
+                "Unauthorized. User has no permissions to access."
+            )
 
         return EmbeddingModelPublicLegacy(
             **model.model_dump(),
@@ -110,10 +120,7 @@ class AIModelsService:
 
         models = []
         for model in completion_models:
-            if (
-                model.family == "azure"
-                and not get_settings().using_azure_models
-            ):
+            if model.family == "azure" and not get_settings().using_azure_models:
                 continue
 
             models.append(

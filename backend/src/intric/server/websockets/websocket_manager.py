@@ -47,7 +47,7 @@ class WebSocketManager:
         try:
             _ = task.result()
         except asyncio.exceptions.CancelledError:
-            logger.debug(f'Task {task.get_name()} was cancelled')
+            logger.debug(f"Task {task.get_name()} was cancelled")
         except Exception:
             logger.exception(traceback.format_exc())
 
@@ -60,7 +60,7 @@ class WebSocketManager:
     async def _listen_to_redis(self, channel: str):
         async with self.redis.pubsub() as pubsub:
             await pubsub.subscribe(channel)
-            logger.debug('Subscribed to Redis channel: %s', channel)
+            logger.debug("Subscribed to Redis channel: %s", channel)
 
             while True:
                 raw_message = await pubsub.get_message(
@@ -71,7 +71,8 @@ class WebSocketManager:
 
     async def _process_redis_message(self, channel: str, raw_message: dict):
         message = RedisMessage.model_validate_json(raw_message["data"].decode())
-        additional_data_present = bool(message.additional_data)
+        additional_data = message.additional_data
+        additional_data_present = bool(additional_data)
         await self.publish(
             channel,
             message=WsOutgoingWebSocketMessage(
@@ -80,16 +81,16 @@ class WebSocketManager:
                     id=message.id,
                     status=message.status,
                     app_id=(
-                        message.additional_data["app_id"]
-                        if additional_data_present
+                        additional_data["app_id"]
+                        if additional_data_present and additional_data is not None
                         else None
                     ),
                     space=(
                         Space(
-                            id=message.additional_data["space"]["id"],
-                            personal=message.additional_data["space"]["personal"],
+                            id=additional_data["space"]["id"],
+                            personal=additional_data["space"]["personal"],
                         )
-                        if additional_data_present
+                        if additional_data_present and additional_data is not None
                         else None
                     ),
                 ),
@@ -114,15 +115,17 @@ class WebSocketManager:
             case IncomingMessageType.PING:
                 await self.pong(websocket)
             case IncomingMessageType.SUBSCRIBE:
+                assert websocket_message.data is not None
                 self.subscribe(
                     websocket,
-                    channel_type=websocket_message.data.channel,
+                    channel_type=websocket_message.data.channel,  # type: ignore[attr-defined]
                     user_id=user.id,
                 )
             case IncomingMessageType.UNSUBSCRIBE:
+                assert websocket_message.data is not None
                 self.unsubscribe(
                     websocket,
-                    channel_type=websocket_message.data.channel,
+                    channel_type=websocket_message.data.channel,  # type: ignore[attr-defined]
                     user_id=user.id,
                 )
             case _:

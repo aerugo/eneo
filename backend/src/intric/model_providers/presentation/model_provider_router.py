@@ -3,7 +3,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 
 from intric.authentication.auth_dependencies import get_current_active_user
-from intric.roles.permissions import Permission, validate_permission
 from intric.database.database import AsyncSession, get_session_with_transaction
 from intric.main.config import get_settings
 from intric.model_providers.domain.model_provider_service import ModelProviderService
@@ -17,6 +16,7 @@ from intric.model_providers.presentation.model_provider_models import (
     ModelProviderUpdate,
     ValidateModelRequest,
 )
+from intric.roles.permissions import Permission, validate_permission
 from intric.server.protocol import responses
 from intric.settings.encryption_service import EncryptionService
 from intric.tenants.tenant_repo import TenantRepository
@@ -63,10 +63,10 @@ async def get_provider_capabilities(
     - default_fields: fallback field definitions for providers without custom fields
     """
     import re
-
-    import litellm
     from collections import defaultdict
     from datetime import date
+
+    import litellm
 
     from intric.tenants.provider_field_config import (
         DEFAULT_FIELDS,
@@ -101,9 +101,7 @@ async def get_provider_capabilities(
         return "00000000"
 
     # Collect all models per provider per mode with metadata
-    raw: dict[str, dict[str, dict[str, dict]]] = defaultdict(
-        lambda: defaultdict(dict)
-    )
+    raw: dict[str, dict[str, dict[str, dict]]] = defaultdict(lambda: defaultdict(dict))
 
     today = date.today().isoformat()
 
@@ -131,7 +129,14 @@ async def get_provider_capabilities(
             continue
         if any(
             kw in model_lower
-            for kw in ("realtime", "-audio-", "gpt-audio", "search-preview", "search-api", "-diarize")
+            for kw in (
+                "realtime",
+                "-audio-",
+                "gpt-audio",
+                "search-preview",
+                "search-api",
+                "-diarize",
+            )
         ):
             continue
 
@@ -147,9 +152,7 @@ async def get_provider_capabilities(
                 model_info["supports_function_calling"] = info.get(
                     "supports_function_calling", False
                 )
-                model_info["supports_reasoning"] = info.get(
-                    "supports_reasoning", False
-                )
+                model_info["supports_reasoning"] = info.get("supports_reasoning", False)
             elif mode == "embedding":
                 model_info["max_input_tokens"] = info.get("max_input_tokens")
                 model_info["output_vector_size"] = info.get("output_vector_size")
@@ -158,7 +161,12 @@ async def get_provider_capabilities(
     # Serialize field definitions (convert in_ -> in for JSON)
     def serialize_fields(fields: list) -> list[dict]:
         return [
-            {"name": f["name"], "required": f["required"], "secret": f["secret"], "in": f["in_"]}
+            {
+                "name": f["name"],
+                "required": f["required"],
+                "secret": f["secret"],
+                "in": f["in_"],
+            }
             for f in fields
         ]
 
@@ -205,6 +213,7 @@ async def get_favorite_providers(
     """Get the tenant's favorite provider types."""
     repo = TenantRepository(session)
     tenant = await repo.get(user.tenant_id)
+    assert tenant is not None
     return {"providers": tenant.favorite_providers}
 
 

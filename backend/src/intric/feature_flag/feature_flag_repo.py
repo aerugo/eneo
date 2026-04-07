@@ -1,5 +1,5 @@
-from uuid import UUID
 from datetime import datetime, timezone
+from uuid import UUID
 
 from sqlalchemy import delete, insert
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -10,8 +10,8 @@ from intric.database.tables.feature_flag_table import (
     GlobalFeatureFlag,
     TenantFeatureFlag,
 )
-from intric.feature_flag.feature_flag_factory import FeatureFlagFactory
 from intric.feature_flag.feature_flag import FeatureFlag
+from intric.feature_flag.feature_flag_factory import FeatureFlagFactory
 from intric.main.exceptions import NotFoundException
 
 
@@ -23,7 +23,7 @@ class FeatureFlagRepository:
         """Delete a tenant's feature flag preference."""
         stmt = delete(TenantFeatureFlag).where(
             TenantFeatureFlag.feature_id == feature_id,
-            TenantFeatureFlag.tenant_id == tenant_id
+            TenantFeatureFlag.tenant_id == tenant_id,
         )
         await self.db_session.execute(stmt)
 
@@ -34,7 +34,7 @@ class FeatureFlagRepository:
             .returning(GlobalFeatureFlag)
         )
         feature = await self.db_session.execute(stmt)
-        return feature.scalar_one()
+        return feature.scalar_one()  # type: ignore[return-value]
 
     async def update(self, obj: FeatureFlag) -> FeatureFlag:
         """Update tenant preferences for a feature flag.
@@ -47,27 +47,35 @@ class FeatureFlagRepository:
 
         # Upsert all enabled tenant preferences
         for tenant_id in obj.tenant_ids:
-            stmt = pg_insert(TenantFeatureFlag).values(
-                feature_id=obj.feature_id,
-                tenant_id=tenant_id,
-                enabled=True,
-                name=obj.name,
-            ).on_conflict_do_update(
-                index_elements=['feature_id', 'tenant_id'],
-                set_={'enabled': True, 'updated_at': datetime.now(timezone.utc)}
+            stmt = (
+                pg_insert(TenantFeatureFlag)
+                .values(
+                    feature_id=obj.feature_id,
+                    tenant_id=tenant_id,
+                    enabled=True,
+                    name=obj.name,
+                )
+                .on_conflict_do_update(
+                    index_elements=["feature_id", "tenant_id"],
+                    set_={"enabled": True, "updated_at": datetime.now(timezone.utc)},
+                )
             )
             await self.db_session.execute(stmt)
 
         # Upsert all disabled tenant preferences
         for tenant_id in obj.disabled_tenant_ids:
-            stmt = pg_insert(TenantFeatureFlag).values(
-                feature_id=obj.feature_id,
-                tenant_id=tenant_id,
-                enabled=False,
-                name=obj.name,
-            ).on_conflict_do_update(
-                index_elements=['feature_id', 'tenant_id'],
-                set_={'enabled': False, 'updated_at': datetime.now(timezone.utc)}
+            stmt = (
+                pg_insert(TenantFeatureFlag)
+                .values(
+                    feature_id=obj.feature_id,
+                    tenant_id=tenant_id,
+                    enabled=False,
+                    name=obj.name,
+                )
+                .on_conflict_do_update(
+                    index_elements=["feature_id", "tenant_id"],
+                    set_={"enabled": False, "updated_at": datetime.now(timezone.utc)},
+                )
             )
             await self.db_session.execute(stmt)
 
@@ -121,4 +129,4 @@ class FeatureFlagRepository:
 
         query = select(TenantFeatureFlag).filter_by(**filters)
         result = await self.db_session.scalars(query)
-        return result.all()
+        return result.all()  # type: ignore[return-value]

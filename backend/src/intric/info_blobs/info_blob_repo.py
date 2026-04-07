@@ -23,7 +23,7 @@ from intric.info_blobs.info_blob import (
 
 class InfoBlobRepository:
     def __init__(self, session: AsyncSession):
-        self.delegate = BaseRepositoryDelegate(
+        self.delegate: BaseRepositoryDelegate[InfoBlobInDB] = BaseRepositoryDelegate(
             session,
             InfoBlobs,
             InfoBlobInDB,
@@ -61,22 +61,27 @@ class InfoBlobRepository:
     async def add(self, info_blob: InfoBlobAdd):
         if info_blob.group_id is not None:
             group = await self._get_group(info_blob.group_id)
+            assert group is not None
             embedding_model_id = group.embedding_model_id
 
         elif info_blob.website_id is not None:
             website = await self._get_website(info_blob.website_id)
+            assert website is not None
             embedding_model_id = website.embedding_model_id
 
         elif info_blob.integration_knowledge_id is not None:
             integration_knowledge = await self._get_integration_knowledge(
                 knowledge_id=info_blob.integration_knowledge_id
             )
+            assert integration_knowledge is not None
             embedding_model_id = integration_knowledge.embedding_model_id
 
         else:
             # Skydd mot none
-            raise ValueError("InfoBlob must reference a group, website, or integration_knowledge")
-        
+            raise ValueError(
+                "InfoBlob must reference a group, website, or integration_knowledge"
+            )
+
         info_blob_to_db = InfoBlobAddToDB(
             **info_blob.model_dump(),
             embedding_model_id=embedding_model_id,
@@ -97,7 +102,9 @@ class InfoBlobRepository:
         we never create duplicates - just update existing ones.
         """
         if not info_blob.integration_knowledge_id or not info_blob.title:
-            raise ValueError("title and integration_knowledge_id are required for upsert")
+            raise ValueError(
+                "title and integration_knowledge_id are required for upsert"
+            )
 
         # Check if blob already exists
         existing = await self.get_by_title_and_integration_knowledge(
@@ -139,7 +146,8 @@ class InfoBlobRepository:
         stmt = sa.select(InfoBlobs).where(
             sa.and_(
                 InfoBlobs.sharepoint_item_id == info_blob.sharepoint_item_id,
-                InfoBlobs.integration_knowledge_id == info_blob.integration_knowledge_id,
+                InfoBlobs.integration_knowledge_id
+                == info_blob.integration_knowledge_id,
             )
         )
         result = await self.session.execute(stmt)
@@ -175,7 +183,7 @@ class InfoBlobRepository:
         record = await self.delegate.update(info_blob)
         return InfoBlobInDB.model_validate(record)
 
-    async def update_size(self, info_blob_id: UUID) -> InfoBlobInDB:
+    async def update_size(self, info_blob_id: UUID) -> InfoBlobInDB | None:
         chunks_size_subquery = (
             sa.select(sa.func.coalesce(sa.func.sum(InfoBlobChunks.size), 0))
             .where(InfoBlobChunks.info_blob_id == info_blob_id)
@@ -438,7 +446,7 @@ class InfoBlobRepository:
         self,
         sharepoint_item_id: str,
         integration_knowledge_id: UUID,
-    ) -> InfoBlobInDB:
+    ) -> InfoBlobInDB | None:
         """Get an info_blob by sharepoint_item_id and integration_knowledge_id."""
         return await self.delegate.get_by(
             conditions={
@@ -480,12 +488,16 @@ class InfoBlobRepository:
     async def get_count_by_integration_knowledge(self, integration_knowledge_id: UUID):
         """Get the count of info_blobs associated with a specific integration_knowledge."""
         stmt = (
-            sa.select(sa.func.count()).select_from(InfoBlobs).where(InfoBlobs.integration_knowledge_id == integration_knowledge_id)
+            sa.select(sa.func.count())
+            .select_from(InfoBlobs)
+            .where(InfoBlobs.integration_knowledge_id == integration_knowledge_id)
         )
 
         return await self.session.scalar(stmt)
 
-    async def get_by_filter_integration_knowledge(self, integration_knowledge_id: UUID) -> list[InfoBlobInDB]:
+    async def get_by_filter_integration_knowledge(
+        self, integration_knowledge_id: UUID
+    ) -> list[InfoBlobInDB]:
         """Get all info_blobs for a specific integration_knowledge."""
         query = (
             sa.select(InfoBlobs)

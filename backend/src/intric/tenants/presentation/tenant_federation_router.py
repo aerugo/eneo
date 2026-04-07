@@ -7,6 +7,10 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 
+# Audit logging - module level imports for consistency
+from intric.audit.domain.action_types import ActionType
+from intric.audit.domain.actor_types import ActorType
+from intric.audit.domain.entity_types import EntityType
 from intric.authentication import auth
 from intric.main.config import (
     Settings,
@@ -18,11 +22,6 @@ from intric.main.config import (
 from intric.main.container.container import Container
 from intric.main.logging import get_logger
 from intric.server.dependencies.container import get_container
-
-# Audit logging - module level imports for consistency
-from intric.audit.domain.action_types import ActionType
-from intric.audit.domain.actor_types import ActorType
-from intric.audit.domain.entity_types import EntityType
 
 logger = get_logger(__name__)
 
@@ -68,7 +67,9 @@ class FederationRequestBase(BaseModel):
         ],
     )
     client_id: str | None = Field(None, description="OAuth client ID")
-    client_secret: str | None = Field(None, min_length=8, description="OAuth client secret")
+    client_secret: str | None = Field(
+        None, min_length=8, description="OAuth client secret"
+    )
     allowed_domains: list[str] | None = Field(
         None,
         description="Email domains allowed for this tenant (e.g., ['stockholm.se'])",
@@ -222,6 +223,7 @@ async def _fetch_discovery_metadata(
 ) -> dict[str, Any]:
     """Fetch and validate discovery metadata for a federation configuration."""
     import aiohttp
+
     from intric.main.aiohttp_client import aiohttp_client
 
     logger.info(
@@ -381,7 +383,11 @@ def _merge_federation_config(
     if "allowed_domains" in updates:
         merged["allowed_domains"] = updates["allowed_domains"] or []
 
-    for field in ("canonical_public_origin", "redirect_path", "additional_redirect_uris"):
+    for field in (
+        "canonical_public_origin",
+        "redirect_path",
+        "additional_redirect_uris",
+    ):
         if field not in updates:
             continue
         value = updates[field]
@@ -475,6 +481,7 @@ async def set_tenant_federation(
     encryption_service = container.encryption_service()
 
     tenant = await tenant_service.get_tenant_by_id(tenant_id)
+    assert tenant is not None
 
     discovery_metadata = await _fetch_discovery_metadata(
         tenant_id=tenant_id,
@@ -554,6 +561,7 @@ async def patch_tenant_federation(
     encryption_service = container.encryption_service()
 
     tenant = await tenant_service.get_tenant_by_id(tenant_id)
+    assert tenant is not None
     existing_config = tenant.federation_config or {}
     if not existing_config:
         raise HTTPException(
@@ -668,6 +676,7 @@ async def delete_tenant_federation(
 
     # Validate tenant exists (raises NotFoundException if not found)
     tenant = await tenant_service.get_tenant_by_id(tenant_id)
+    assert tenant is not None
 
     # Delete federation config
     await tenant_repo.delete_federation_config(tenant_id=tenant_id)
@@ -717,6 +726,7 @@ async def get_tenant_federation(
 
     # Validate tenant exists (raises NotFoundException if not found)
     tenant = await tenant_service.get_tenant_by_id(tenant_id)
+    assert tenant is not None
 
     # Get config with metadata
     metadata = await tenant_repo.get_federation_config_with_metadata(tenant_id)
@@ -764,6 +774,7 @@ async def test_tenant_federation(
 
     # Validate tenant exists (raises NotFoundException if not found)
     tenant = await tenant_service.get_tenant_by_id(tenant_id)
+    assert tenant is not None
     if not tenant.federation_config:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -779,6 +790,7 @@ async def test_tenant_federation(
 
     # Test connection
     import aiohttp
+
     from intric.main.aiohttp_client import aiohttp_client
 
     logger.info(

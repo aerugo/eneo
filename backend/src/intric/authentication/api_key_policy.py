@@ -12,14 +12,14 @@ from intric.allowed_origins.origin_matching import origin_matches_pattern
 from intric.authentication.api_key_request_context import resolve_client_ip
 from intric.authentication.api_key_resolver import ApiKeyValidationError
 from intric.authentication.auth_models import (
+    PERMISSION_LEVEL_ORDER,
+    ApiKeyCreateRequest,
     ApiKeyOwnership,
     ApiKeyPermission,
-    ApiKeyCreateRequest,
     ApiKeyScopeType,
     ApiKeyState,
     ApiKeyType,
     ApiKeyV2InDB,
-    PERMISSION_LEVEL_ORDER,
     ResourcePermissions,
     compute_effective_state,
 )
@@ -29,6 +29,7 @@ from intric.roles.permissions import Permission
 
 if TYPE_CHECKING:
     from starlette.requests import Request
+
     from intric.spaces.space import Space
     from intric.spaces.space_service import SpaceService
     from intric.users.user import UserInDB
@@ -97,7 +98,9 @@ class ApiKeyPolicyService:
                 )
             # Extra guardrail: service write/admin keys need IP allowlist or expiration
             if request.permission in (ApiKeyPermission.WRITE, ApiKeyPermission.ADMIN):
-                has_ip = request.allowed_ips is not None and len(request.allowed_ips) > 0
+                has_ip = (
+                    request.allowed_ips is not None and len(request.allowed_ips) > 0
+                )
                 has_expiry = request.expires_at is not None
                 if not has_ip and not has_expiry:
                     raise ApiKeyValidationError(
@@ -297,7 +300,10 @@ class ApiKeyPolicyService:
                     if isinstance(raw_permission, ApiKeyPermission)
                     else ApiKeyPermission(raw_permission)
                 )
-                if key_type == ApiKeyType.PK and new_permission == ApiKeyPermission.ADMIN:
+                if (
+                    key_type == ApiKeyType.PK
+                    and new_permission == ApiKeyPermission.ADMIN
+                ):
                     raise ApiKeyValidationError(
                         status_code=400,
                         code="invalid_request",
@@ -376,7 +382,9 @@ class ApiKeyPolicyService:
         elif new_permission is not None:
             # Permission is being lowered — check existing resource_permissions still fit
             if key.resource_permissions is not None:
-                existing_rp = ResourcePermissions.model_validate(key.resource_permissions)
+                existing_rp = ResourcePermissions.model_validate(
+                    key.resource_permissions
+                )
                 self._validate_resource_permissions_ceiling(
                     resource_permissions=existing_rp,
                     permission=new_permission,
@@ -564,7 +572,10 @@ class ApiKeyPolicyService:
                 message="Origin header required for pk_ keys.",
             )
 
-        if self._is_localhost_origin(origin) and self.settings.api_key_allow_localhost_origin:
+        if (
+            self._is_localhost_origin(origin)
+            and self.settings.api_key_allow_localhost_origin
+        ):
             return
         # When allow_localhost_origin is off, localhost falls through to
         # normal tenant/key pattern matching — no free pass.

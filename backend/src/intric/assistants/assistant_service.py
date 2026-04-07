@@ -9,17 +9,19 @@ from intric.ai_models.completion_models.completion_model import (
     ResponseType,
     TokenUsage,
 )
-from intric.main.logging import get_logger
 from intric.assistants.api.assistant_models import AssistantResponse
 from intric.assistants.assistant import Assistant
 from intric.assistants.assistant_factory import AssistantFactory
 from intric.assistants.assistant_repo import AssistantRepository
+from intric.authentication.api_key_scope_revoker import ApiKeyScopeRevoker
+from intric.authentication.auth_models import ApiKeyScopeType, ApiKeyStateReasonCode
 from intric.authentication.auth_service import AuthService
 from intric.completion_models.infrastructure.context_builder import count_tokens
 from intric.completion_models.infrastructure.web_search import WebSearch
 from intric.files.file_service import FileService
 from intric.icons.icon_repo import IconRepository
 from intric.main.exceptions import BadRequestException, UnauthorizedException
+from intric.main.logging import get_logger
 from intric.main.models import NOT_PROVIDED, NotProvided, ResourcePermission
 from intric.prompts.api.prompt_models import PromptCreate
 from intric.prompts.prompt import Prompt
@@ -38,8 +40,6 @@ from intric.templates.assistant_template.assistant_template_service import (
 )
 from intric.users.user import UserInDB
 from intric.workflows.step_repo import StepRepository
-from intric.authentication.auth_models import ApiKeyScopeType, ApiKeyStateReasonCode
-from intric.authentication.api_key_scope_revoker import ApiKeyScopeRevoker
 
 logger = get_logger(__name__)
 
@@ -215,7 +215,7 @@ class AssistantService:
         # TODO: Review how we get the permissions to the presentation layer
         permissions = actor.get_assistant_permissions(assistant=assistant)
 
-        return assistant, permissions
+        return assistant, permissions  # type: ignore[return-value]
 
     async def _create_from_template(
         self,
@@ -275,18 +275,18 @@ class AssistantService:
         """Get a completion model for the space. Returns None if no model is available."""
         model = space.get_default_completion_model()
         if model:
-            return model
+            return model  # type: ignore[return-value]
 
         if space.completion_models:
             try:
                 model = space.get_latest_completion_model()
                 if model:
-                    return model
+                    return model  # type: ignore[return-value]
             except Exception:
                 pass
 
         # Try to get tenant default model
-        return await self.completion_model_crud_service.get_default_completion_model()
+        return await self.completion_model_crud_service.get_default_completion_model()  # type: ignore[return-value]
 
     async def create_default_assistant(self, name: str, space: "Space"):
         cm = space.get_default_completion_model()
@@ -388,8 +388,11 @@ class AssistantService:
         # Validate MCP server assignments against tenant + space boundaries.
         if mcp_server_ids is not None:
             import sqlalchemy as sa
+
             from intric.database.tables.mcp_server_table import (
                 MCPServers as MCPServersTable,
+            )
+            from intric.database.tables.mcp_server_table import (
                 SpacesMCPServers as SpacesMCPServersTable,
             )
 
@@ -420,7 +423,9 @@ class AssistantService:
             space_servers_result = await self.repo.session.execute(space_servers_query)
             space_server_ids = {row[0] for row in space_servers_result.fetchall()}
             missing_space_ids = [
-                str(server_id) for server_id in mcp_server_ids if server_id not in space_server_ids
+                str(server_id)
+                for server_id in mcp_server_ids
+                if server_id not in space_server_ids
             ]
             if missing_space_ids:
                 raise BadRequestException(
@@ -453,7 +458,9 @@ class AssistantService:
         # Only check when either side is being updated to avoid false positives on
         # unrelated updates (e.g. renaming an assistant).
         knowledge_changing = (
-            groups is not None or websites is not None or integration_knowledge_ids is not None
+            groups is not None
+            or websites is not None
+            or integration_knowledge_ids is not None
         )
         mcp_changing = mcp_server_ids is not None
         if knowledge_changing or mcp_changing:
@@ -503,7 +510,7 @@ class AssistantService:
         # TODO: Review how we get the permissions to the presentation layer
         permissions = actor.get_assistant_permissions(assistant=assistant)
 
-        return assistant, permissions
+        return assistant, permissions  # type: ignore[return-value]
 
     async def get_assistants(
         self,
@@ -666,8 +673,13 @@ class AssistantService:
                             for tc in chunk.tool_calls_metadata:
                                 # Check if this tool_call already exists (from TOOL_APPROVAL_REQUIRED)
                                 existing = next(
-                                    (t for t in tool_calls if t.tool_call_id and t.tool_call_id == tc.tool_call_id),
-                                    None
+                                    (
+                                        t
+                                        for t in tool_calls
+                                        if t.tool_call_id
+                                        and t.tool_call_id == tc.tool_call_id
+                                    ),
+                                    None,
                                 )
                                 if existing:
                                     # Update existing entry with approval status
@@ -691,16 +703,16 @@ class AssistantService:
                         # Collect tool calls for approval flow (approval status will be updated later)
                         if chunk.tool_calls_metadata:
                             for tc in chunk.tool_calls_metadata:
-                                    tool_calls.append(
-                                        ToolCallInfo(
-                                            server_name=tc.server_name,
-                                            tool_name=tc.tool_name,
-                                            arguments=tc.arguments,
-                                            tool_call_id=tc.tool_call_id,
-                                            approved=None,  # Will be updated when TOOL_CALL with approval status arrives
-                                            result_status=tc.result_status,
-                                        )
+                                tool_calls.append(
+                                    ToolCallInfo(
+                                        server_name=tc.server_name,
+                                        tool_name=tc.tool_name,
+                                        arguments=tc.arguments,
+                                        tool_call_id=tc.tool_call_id,
+                                        approved=None,  # Will be updated when TOOL_CALL with approval status arrives
+                                        result_status=tc.result_status,
                                     )
+                                )
                         yield chunk
 
                     if chunk.response_type == ResponseType.TOOL_APPROVAL_TIMEOUT:
@@ -710,13 +722,16 @@ class AssistantService:
                                     (
                                         t
                                         for t in tool_calls
-                                        if t.tool_call_id and t.tool_call_id == tc.tool_call_id
+                                        if t.tool_call_id
+                                        and t.tool_call_id == tc.tool_call_id
                                     ),
                                     None,
                                 )
                                 if existing:
                                     existing.approved = False
-                                    existing.result_status = tc.result_status or "timeout_denied"
+                                    existing.result_status = (
+                                        tc.result_status or "timeout_denied"
+                                    )
                                 else:
                                     tool_calls.append(
                                         ToolCallInfo(
@@ -725,7 +740,8 @@ class AssistantService:
                                             arguments=tc.arguments,
                                             tool_call_id=tc.tool_call_id,
                                             approved=False,
-                                            result_status=tc.result_status or "timeout_denied",
+                                            result_status=tc.result_status
+                                            or "timeout_denied",
                                         )
                                     )
                         yield chunk
@@ -739,17 +755,24 @@ class AssistantService:
                 )
                 # Prefer actual provider token counts, fall back to litellm estimates
                 if stream_usage and stream_usage.prompt_tokens is not None:
-                    num_tokens_question = stream_usage.prompt_tokens + assistant_selector_tokens
+                    num_tokens_question = (
+                        stream_usage.prompt_tokens + assistant_selector_tokens
+                    )
                     input_source = "provider"
                 else:
-                    num_tokens_question = response.total_token_count + assistant_selector_tokens
+                    num_tokens_question = (
+                        response.total_token_count + assistant_selector_tokens
+                    )
                     input_source = "litellm"
 
                 if stream_usage and stream_usage.completion_tokens is not None:
                     num_tokens_answer = stream_usage.completion_tokens
                     output_source = "provider"
                 else:
-                    num_tokens_answer = count_tokens(response_string, completion_model.name) + reasoning_token_count
+                    num_tokens_answer = (
+                        count_tokens(response_string, completion_model.name)
+                        + reasoning_token_count
+                    )
                     output_source = "litellm"
 
                 logger.info(
@@ -806,17 +829,24 @@ class AssistantService:
             )
             # Prefer actual provider token counts, fall back to litellm estimates
             if response.usage and response.usage.prompt_tokens is not None:
-                num_tokens_question = response.usage.prompt_tokens + assistant_selector_tokens
+                num_tokens_question = (
+                    response.usage.prompt_tokens + assistant_selector_tokens
+                )
                 input_source = "provider"
             else:
-                num_tokens_question = response.total_token_count + assistant_selector_tokens
+                num_tokens_question = (
+                    response.total_token_count + assistant_selector_tokens
+                )
                 input_source = "litellm"
 
             if response.usage and response.usage.completion_tokens is not None:
                 num_tokens_answer = response.usage.completion_tokens
                 output_source = "provider"
             else:
-                num_tokens_answer = count_tokens(final_answer, completion_model.name) + reasoning_token_count
+                num_tokens_answer = (
+                    count_tokens(final_answer, completion_model.name)
+                    + reasoning_token_count
+                )
                 output_source = "litellm"
 
             logger.info(
@@ -928,6 +958,7 @@ class AssistantService:
                     name=name, assistant_id=active_assistant.id
                 )
 
+        assert session is not None
         for _question in session.questions:
             _question.question = clean_intric_tag(_question.question)
 
@@ -1022,6 +1053,7 @@ class AssistantService:
         permissions = actor.get_assistant_permissions(assistant=assistant)
 
         return assistant, permissions
+
     async def get_assistant_mcp_servers(self, assistant_id: UUID):
         """Get all MCP servers associated with an assistant."""
         space = await self.space_repo.get_space_by_assistant(assistant_id=assistant_id)
@@ -1063,12 +1095,15 @@ class AssistantService:
             )
 
         # Get existing associations from the database
+        import sqlalchemy as sa
+
         from intric.database.tables.assistant_table import AssistantMCPServers
         from intric.database.tables.mcp_server_table import (
             MCPServers as MCPServersTable,
+        )
+        from intric.database.tables.mcp_server_table import (
             SpacesMCPServers as SpacesMCPServersTable,
         )
-        import sqlalchemy as sa
 
         # Validate tenant ownership + enablement
         mcp_server_query = sa.select(MCPServersTable).where(
@@ -1109,13 +1144,16 @@ class AssistantService:
 
         # Update via repository
         from intric.database.tables.assistant_table import Assistants
+
         stmt = sa.select(Assistants).where(Assistants.id == assistant_id)
         assistant_in_db = await self.repo.session.scalar(stmt)
 
         await self.repo._set_mcp_servers(assistant_in_db, existing_associations)
 
         # Refresh and return
-        refreshed_space = await self.space_repo.get_space_by_assistant(assistant_id=assistant_id)
+        refreshed_space = await self.space_repo.get_space_by_assistant(
+            assistant_id=assistant_id
+        )
         assistant = refreshed_space.get_assistant(assistant_id=assistant_id)
         permissions = actor.get_assistant_permissions(assistant=assistant)
 
@@ -1143,8 +1181,12 @@ class AssistantService:
             )
 
         # Get existing associations from the database
-        from intric.database.tables.assistant_table import AssistantMCPServers, Assistants
         import sqlalchemy as sa
+
+        from intric.database.tables.assistant_table import (
+            AssistantMCPServers,
+            Assistants,
+        )
 
         stmt = sa.select(AssistantMCPServers).where(
             AssistantMCPServers.assistant_id == assistant_id
@@ -1167,7 +1209,9 @@ class AssistantService:
         await self.repo._set_mcp_servers(assistant_in_db, existing_associations)
 
         # Refresh and return
-        refreshed_space = await self.space_repo.get_space_by_assistant(assistant_id=assistant_id)
+        refreshed_space = await self.space_repo.get_space_by_assistant(
+            assistant_id=assistant_id
+        )
         assistant = refreshed_space.get_assistant(assistant_id=assistant_id)
         permissions = actor.get_assistant_permissions(assistant=assistant)
 
@@ -1198,8 +1242,12 @@ class AssistantService:
             )
 
         # Get existing associations from the database
-        from intric.database.tables.assistant_table import AssistantMCPServers, Assistants
         import sqlalchemy as sa
+
+        from intric.database.tables.assistant_table import (
+            AssistantMCPServers,
+            Assistants,
+        )
 
         stmt = sa.select(AssistantMCPServers).where(
             AssistantMCPServers.assistant_id == assistant_id
@@ -1224,7 +1272,9 @@ class AssistantService:
         await self.repo._set_mcp_servers(assistant_in_db, existing_associations)
 
         # Refresh and return
-        refreshed_space = await self.space_repo.get_space_by_assistant(assistant_id=assistant_id)
+        refreshed_space = await self.space_repo.get_space_by_assistant(
+            assistant_id=assistant_id
+        )
         assistant = refreshed_space.get_assistant(assistant_id=assistant_id)
         permissions = actor.get_assistant_permissions(assistant=assistant)
 

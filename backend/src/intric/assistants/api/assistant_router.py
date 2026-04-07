@@ -12,18 +12,30 @@ from intric.assistants.api.assistant_models import (
     AssistantPublic,
     AssistantUpdatePublic,
 )
-from intric.authentication.auth_models import ApiKey, ApiKeyNotificationTargetType
-from intric.authentication.api_key_notification_auto_follow import auto_follow_on_publish
+
+# Audit logging - module level imports for consistency
+from intric.audit.application.audit_metadata import AuditMetadata
+from intric.audit.domain.action_types import ActionType
+from intric.audit.domain.entity_types import EntityType
+from intric.authentication.api_key_notification_auto_follow import (
+    auto_follow_on_publish,
+)
 from intric.authentication.api_key_router_helpers import (
     error_responses as api_key_error_responses,
 )
+from intric.authentication.auth_dependencies import get_scope_filter
+from intric.authentication.auth_models import ApiKey, ApiKeyNotificationTargetType
 from intric.database.database import AsyncSession
 from intric.main.config import get_settings
 from intric.main.container.container import Container
-from intric.main.models import NOT_PROVIDED, CursorPaginatedResponse, PaginatedResponse
+from intric.main.models import (
+    NOT_PROVIDED,
+    CursorPaginatedResponse,
+    PaginatedResponse,
+    is_provided,
+)
 from intric.prompts.api.prompt_models import PromptSparse
 from intric.server import protocol
-from intric.authentication.auth_dependencies import get_scope_filter
 from intric.server.dependencies.container import get_container
 from intric.server.protocol import responses
 from intric.sessions.session import (
@@ -37,11 +49,6 @@ from intric.sessions.session_protocol import (
     to_sessions_paginated_response,
 )
 from intric.spaces.api.space_models import TransferApplicationRequest
-
-# Audit logging - module level imports for consistency
-from intric.audit.application.audit_metadata import AuditMetadata
-from intric.audit.domain.action_types import ActionType
-from intric.audit.domain.entity_types import EntityType
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -146,7 +153,11 @@ async def get_assistants(
     scope_filter = get_scope_filter(request)
 
     # Assistant-scoped keys must not bypass scope via for_tenant
-    if for_tenant and scope_filter.scope_type is not None and scope_filter.scope_type != "tenant":
+    if (
+        for_tenant
+        and scope_filter.scope_type is not None
+        and scope_filter.scope_type != "tenant"
+    ):
         raise HTTPException(
             status_code=403,
             detail={
@@ -218,6 +229,7 @@ async def update_assistant(
     old_mcp_tool_overrides = None
     if assistant.mcp_tools is not None:
         import sqlalchemy as sa
+
         from intric.database.tables.assistant_table import AssistantMCPServerTools
 
         stmt = sa.select(
@@ -249,7 +261,9 @@ async def update_assistant(
 
     mcp_tool_settings = None
     if assistant.mcp_tools is not None:
-        mcp_tool_settings = [(tool.tool_id, tool.is_enabled) for tool in assistant.mcp_tools]
+        mcp_tool_settings = [
+            (tool.tool_id, tool.is_enabled) for tool in assistant.mcp_tools
+        ]
 
     completion_model_id = None
     if assistant.completion_model is not None:
@@ -359,7 +373,7 @@ async def update_assistant(
         changes["top_p"] = {"old": old_top_p, "new": new_top_p}
 
     # Description change
-    if description is not NOT_PROVIDED and description != old_assistant.description:
+    if is_provided(description) and description != old_assistant.description:
         if isinstance(old_assistant.description, str):
             old_desc_preview = (
                 (old_assistant.description[:50] + "...")
@@ -532,8 +546,9 @@ async def update_assistant(
 
     # MCP Servers
     mcp_servers_added, mcp_servers_removed = get_changes_for_list(
-        old_assistant.mcp_servers, updated_assistant.mcp_servers,
-        assistant_space_id=updated_assistant.space_id
+        old_assistant.mcp_servers,
+        updated_assistant.mcp_servers,
+        assistant_space_id=updated_assistant.space_id,
     )
     if mcp_servers_added or mcp_servers_removed:
         changes["mcp_servers"] = {}
@@ -550,11 +565,13 @@ async def update_assistant(
         for tid, is_enabled in new_tool_map.items():
             old_enabled = old_mcp_tool_overrides.get(tid)
             if old_enabled != is_enabled:
-                tool_changes.append({
-                    "tool_id": tid,
-                    "old_enabled": old_enabled,
-                    "new_enabled": is_enabled,
-                })
+                tool_changes.append(
+                    {
+                        "tool_id": tid,
+                        "old_enabled": old_enabled,
+                        "new_enabled": is_enabled,
+                    }
+                )
         if tool_changes:
             changes["mcp_tools"] = tool_changes
 
@@ -1177,7 +1194,6 @@ async def get_assistant_mcp_servers(
     service = container.assistant_service()
     mcp_servers = await service.get_assistant_mcp_servers(id)
 
-
     # Return as list of AssistantMCPServerPublic
     return {
         "items": [
@@ -1224,7 +1240,11 @@ async def add_mcp_to_assistant(
         metadata=AuditMetadata.standard(
             actor=user,
             target=assistant,
-            changes={"mcp_servers": {"added": [{"id": str(mcp_server.id), "name": mcp_server.name}]}},
+            changes={
+                "mcp_servers": {
+                    "added": [{"id": str(mcp_server.id), "name": mcp_server.name}]
+                }
+            },
         ),
     )
 
@@ -1267,6 +1287,10 @@ async def remove_mcp_from_assistant(
         metadata=AuditMetadata.standard(
             actor=user,
             target=assistant,
-            changes={"mcp_servers": {"removed": [{"id": str(mcp_server.id), "name": mcp_server.name}]}},
+            changes={
+                "mcp_servers": {
+                    "removed": [{"id": str(mcp_server.id), "name": mcp_server.name}]
+                }
+            },
         ),
     )
