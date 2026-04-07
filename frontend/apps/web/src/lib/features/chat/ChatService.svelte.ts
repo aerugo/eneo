@@ -30,11 +30,10 @@ export class ChatService {
   partner = $derived(this.#chatPartner);
   hasCompletionModel = $derived(
     this.#chatPartner &&
-    ('completion_model' in this.#chatPartner
-      ? this.#chatPartner.completion_model !== null &&
-        this.#chatPartner.completion_model !== undefined
-      : 'tools' in this.#chatPartner &&
-        this.#chatPartner.tools?.assistants?.length > 0)
+      ("completion_model" in this.#chatPartner
+        ? this.#chatPartner.completion_model !== null &&
+          this.#chatPartner.completion_model !== undefined
+        : "tools" in this.#chatPartner && this.#chatPartner.tools?.assistants?.length > 0)
   );
   #intric: Intric;
   currentConversation = $state<Conversation>(emptyConversation());
@@ -42,7 +41,6 @@ export class ChatService {
   loadedConversations = $state<ConversationSparse[]>([]);
   hasMoreConversations = $derived(this.loadedConversations.length < this.totalConversations);
   #nextCursor = $state<string | null>(null);
-
 
   // Tool approval state
   pendingToolApproval = $state<PendingToolApproval | null>(null);
@@ -253,7 +251,8 @@ export class ChatService {
               if (isStale()) return;
               // Add the message to the conversation only after backend confirms
               this.currentConversation.messages?.push(emptyMessage({ question }));
-              ref = this.currentConversation.messages[this.currentConversation.messages?.length - 1];
+              ref =
+                this.currentConversation.messages[this.currentConversation.messages?.length - 1];
               Object.assign(ref, chunk);
               this.currentConversation.id = chunk.session_id;
               this.currentConversation.name = question;
@@ -309,6 +308,7 @@ export class ChatService {
               if (!ensureCurrentSession(event)) return;
 
               if (event.intric_event_type === "generating_image") {
+                if (!ref) return;
                 ref.generated_files.push({ id: "", name: "", mimetype: "", size: 0 });
               }
             },
@@ -317,21 +317,29 @@ export class ChatService {
               // Store tool calls for rendering with translations
               // @ts-expect-error - mcp_tool_calls is a runtime property for streaming
               if (!ref.mcp_tool_calls) {
-                // @ts-expect-error
+                // @ts-expect-error - mcp_tool_calls is not in the static type
                 ref.mcp_tool_calls = [];
               }
               // Update existing tool calls or add new ones (avoid duplicates from approval flow)
-              for (const tool of event.tools) {
-                // @ts-expect-error
+              for (const tool of event.tools as Array<{
+                tool_call_id?: string;
+                [key: string]: unknown;
+              }>) {
+                // @ts-expect-error - mcp_tool_calls is a runtime property
                 const existingIndex = ref.mcp_tool_calls.findIndex(
-                  (t: { tool_call_id?: string }) => t.tool_call_id && t.tool_call_id === tool.tool_call_id
+                  (t: { tool_call_id?: string }) =>
+                    t.tool_call_id && t.tool_call_id === tool.tool_call_id
                 );
                 if (existingIndex >= 0) {
                   // Update existing entry with approval status
-                  // @ts-expect-error
-                  ref.mcp_tool_calls[existingIndex] = { ...ref.mcp_tool_calls[existingIndex], ...tool };
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  const mcpCalls = (ref as any).mcp_tool_calls;
+                  mcpCalls[existingIndex] = {
+                    ...mcpCalls[existingIndex],
+                    ...tool
+                  };
                 } else {
-                  // @ts-expect-error
+                  // @ts-expect-error - mcp_tool_calls is a runtime property
                   ref.mcp_tool_calls.push(tool);
                 }
               }
@@ -341,10 +349,10 @@ export class ChatService {
               // Add tools to the message so they display in the UI
               // @ts-expect-error - mcp_tool_calls is a runtime property for streaming
               if (!ref.mcp_tool_calls) {
-                // @ts-expect-error
+                // @ts-expect-error - mcp_tool_calls is not in the static type
                 ref.mcp_tool_calls = [];
               }
-              // @ts-expect-error
+              // @ts-expect-error - mcp_tool_calls is a runtime property
               ref.mcp_tool_calls.push(...event.tools);
               // Set pending approval state - UI will show inline approval buttons
               this.pendingToolApproval = {
@@ -368,24 +376,24 @@ export class ChatService {
               if (ref) {
                 // @ts-expect-error - mcp_tool_calls is a runtime property for streaming
                 if (!ref.mcp_tool_calls) {
-                  // @ts-expect-error
+                  // @ts-expect-error - mcp_tool_calls is a runtime property for streaming
                   ref.mcp_tool_calls = [];
                 }
                 for (const tool of event.tools) {
-                  // @ts-expect-error
+                  // @ts-expect-error - mcp_tool_calls is a runtime property for streaming
                   const existingIndex = ref.mcp_tool_calls.findIndex(
                     (t: { tool_call_id?: string }) =>
                       t.tool_call_id && t.tool_call_id === tool.tool_call_id
                   );
                   if (existingIndex >= 0) {
-                    // @ts-expect-error
+                    // @ts-expect-error - mcp_tool_calls is a runtime property for streaming
                     ref.mcp_tool_calls[existingIndex] = {
-                      // @ts-expect-error
+                      // @ts-expect-error - mcp_tool_calls is a runtime property for streaming
                       ...ref.mcp_tool_calls[existingIndex],
                       ...tool
                     };
                   } else {
-                    // @ts-expect-error
+                    // @ts-expect-error - mcp_tool_calls is a runtime property for streaming
                     ref.mcp_tool_calls.push(tool);
                   }
                 }
@@ -454,7 +462,7 @@ export class ChatService {
   // Submit approval decisions for pending tool calls
   async submitToolApproval(decisions: Array<{ tool_call_id: string; approved: boolean }>) {
     if (!this.pendingToolApproval) {
-      console.warn('[ChatService] No pending tool approval to submit');
+      console.warn("[ChatService] No pending tool approval to submit");
       return;
     }
 
@@ -464,7 +472,7 @@ export class ChatService {
         decisions
       });
     } catch (error) {
-      console.error('[ChatService] Failed to submit tool approval:', error);
+      console.error("[ChatService] Failed to submit tool approval:", error);
       throw error;
     } finally {
       // Clear pending approval regardless of success/failure
@@ -476,7 +484,7 @@ export class ChatService {
   async approveAllTools() {
     if (!this.pendingToolApproval) return;
 
-    const decisions = this.pendingToolApproval.tools.map(tool => ({
+    const decisions = this.pendingToolApproval.tools.map((tool) => ({
       tool_call_id: tool.tool_call_id!,
       approved: true
     }));
@@ -488,7 +496,7 @@ export class ChatService {
   async rejectAllTools() {
     if (!this.pendingToolApproval) return;
 
-    const decisions = this.pendingToolApproval.tools.map(tool => ({
+    const decisions = this.pendingToolApproval.tools.map((tool) => ({
       tool_call_id: tool.tool_call_id!,
       approved: false
     }));
@@ -508,7 +516,7 @@ export class ChatService {
 
     // Remove the approved tool from pending list
     const remainingTools = this.pendingToolApproval.tools.filter(
-      t => t.tool_call_id !== toolCallId
+      (t) => t.tool_call_id !== toolCallId
     );
 
     if (remainingTools.length === 0) {
@@ -535,7 +543,7 @@ export class ChatService {
 
     // Remove the denied tool from pending list
     const remainingTools = this.pendingToolApproval.tools.filter(
-      t => t.tool_call_id !== toolCallId
+      (t) => t.tool_call_id !== toolCallId
     );
 
     if (remainingTools.length === 0) {

@@ -3,6 +3,7 @@
   import { Page, Settings } from "$lib/components/layout";
   import { Button, Input } from "@intric/ui";
   import { goto } from "$app/navigation";
+  import { resolve } from "$app/paths";
   import { m } from "$lib/paraglide/messages";
   import { toast } from "$lib/components/toast";
   import { toastError } from "$lib/core/errors";
@@ -34,17 +35,28 @@
   let iconName = $state<string | null>(data.template.icon_name || null);
   let promptText = $state(data.template.prompt_text || "");
   let completionModel = $state(
-    data.completionModels?.find(m =>
-      m.id === data.template.completion_model_id ||
-      m.name === data.template.completion_model_name
-    ) || data.completionModels?.[0] || null
+    data.completionModels?.find(
+      (m) =>
+        m.id === data.template.completion_model_id || m.name === data.template.completion_model_name
+    ) ||
+      data.completionModels?.[0] ||
+      null
   );
   let completionModelKwargs = $state(data.template.completion_model_kwargs || {});
   let isSaving = $state(false);
 
   // Input field configuration from template
   let inputDescription = $state(data.template.input_description || "");
-  let inputType = $state<"text-upload" | "text-field" | "audio-upload" | "audio-recorder" | "image-upload">(data.template.input_type || "text-field");
+  let inputType = $state<
+    "text-upload" | "text-field" | "audio-upload" | "audio-recorder" | "image-upload"
+  >(
+    (data.template.input_type || "text-field") as
+      | "text-upload"
+      | "text-field"
+      | "audio-upload"
+      | "audio-recorder"
+      | "image-upload"
+  );
 
   const inputTypes = {
     "text-upload": { icon: IconFileText, label: m.upload_text_document() },
@@ -80,19 +92,27 @@
 
   // Parse wizard configuration from template
   // Handle both object format {attachments: {...}} and array format [{type: "attachments", ...}]
-  const wizard = data.template.wizard_config || data.template.wizard || {};
+  // Schema only declares `wizard`, but backend may also send `wizard_config` — narrow to unknown.
+  type AttachmentsConfig = {
+    required?: boolean;
+    title?: string;
+    description?: string;
+    type?: string;
+  };
+  const templateWithLegacy = data.template as typeof data.template & { wizard_config?: unknown };
+  const wizard: unknown = templateWithLegacy.wizard_config ?? data.template.wizard ?? {};
 
-  let attachmentsConfig: any;
+  let attachmentsConfig: AttachmentsConfig | undefined;
   if (Array.isArray(wizard)) {
-    attachmentsConfig = wizard.find((c: any) => c.type === "attachments");
+    attachmentsConfig = (wizard as AttachmentsConfig[]).find((c) => c.type === "attachments");
   } else {
-    attachmentsConfig = wizard.attachments;
+    attachmentsConfig = (wizard as { attachments?: AttachmentsConfig }).attachments;
   }
 
   let wizardAttachmentsEnabled = $state(!!attachmentsConfig);
-  let wizardAttachmentsRequired = $state(attachmentsConfig?.required || false);
-  let wizardAttachmentsTitle = $state(attachmentsConfig?.title || "");
-  let wizardAttachmentsDescription = $state(attachmentsConfig?.description || "");
+  let wizardAttachmentsRequired = $state(Boolean(attachmentsConfig?.required));
+  let wizardAttachmentsTitle = $state(String(attachmentsConfig?.title || ""));
+  let wizardAttachmentsDescription = $state(String(attachmentsConfig?.description || ""));
 
   async function handleUpdateTemplate() {
     if (!name || !category) {
@@ -110,29 +130,31 @@
       // Transform wizard configuration to backend format
       // NOTE: App templates MUST have collections: null (backend validator enforces this)
       const wizard = {
-        attachments: wizardAttachmentsEnabled ? {
-          required: wizardAttachmentsRequired,
-          title: wizardAttachmentsTitle || undefined,
-          description: wizardAttachmentsDescription || undefined
-        } : null,
-        collections: null  // MUST be null for app templates (backend validator)
+        attachments: wizardAttachmentsEnabled
+          ? {
+              required: wizardAttachmentsRequired,
+              title: wizardAttachmentsTitle || undefined,
+              description: wizardAttachmentsDescription || undefined
+            }
+          : null,
+        collections: null // MUST be null for app templates (backend validator)
       };
 
       const templateData = {
         name,
         description,
         category,
-        prompt: promptText,  // Backend expects string, not object
+        prompt: promptText, // Backend expects string, not object
         completion_model_id: completionModel?.id,
         completion_model_kwargs: completionModelKwargs,
-        input_type: inputType,  // Single string, not array
+        input_type: inputType, // Single string, not array
         input_description: inputDescription || undefined,
-        wizard,  // Always send wizard object, never undefined
-        icon_name: iconName || undefined  // Include icon if selected
+        wizard, // Always send wizard object, never undefined
+        icon_name: iconName || undefined // Include icon if selected
       };
 
       await intric.templates.admin.updateApp(data.template.id, templateData);
-      goto("/admin/templates?success=template_updated");
+      goto(resolve("/admin/templates?success=template_updated"));
     } catch (error) {
       console.error("Failed to update template:", error);
       toastError(error);
@@ -150,17 +172,12 @@
   <Page.Header>
     <Page.Title
       title={m.edit_app_template()}
-      parent={{ href: "/admin/templates", label: m.templates() }}
+      parent={{ href: "/admin/templates", title: m.templates() }}
     />
 
     <Page.Flex>
       <Button variant="outlined" href={localizeHref("/admin/templates")}>{m.cancel()}</Button>
-      <Button
-        variant="positive"
-        class="w-fit"
-        onclick={handleUpdateTemplate}
-        disabled={isSaving}
-      >
+      <Button variant="positive" class="w-fit" onclick={handleUpdateTemplate} disabled={isSaving}>
         {isSaving ? m.loading() : m.save_changes()}
       </Button>
     </Page.Flex>
@@ -360,10 +377,14 @@
             />
 
             {#if wizardAttachmentsEnabled}
-              <div class="flex flex-col gap-4 rounded-lg border border-default bg-hover-default p-4">
+              <div
+                class="border-default bg-hover-default flex flex-col gap-4 rounded-lg border p-4"
+              >
                 <label class="flex items-center gap-2">
                   <input type="checkbox" bind:checked={wizardAttachmentsRequired} />
-                  <span class="text-sm text-default">{m.wizard_attachments_required_description()}</span>
+                  <span class="text-default text-sm"
+                    >{m.wizard_attachments_required_description()}</span
+                  >
                 </label>
 
                 <Input.Text
@@ -373,7 +394,10 @@
                 />
 
                 <div class="flex flex-col gap-1">
-                  <label for="wizard-attachments-description" class="text-sm font-medium text-default">{m.description()}</label>
+                  <label
+                    for="wizard-attachments-description"
+                    class="text-default text-sm font-medium">{m.description()}</label
+                  >
                   <textarea
                     id="wizard-attachments-description"
                     bind:value={wizardAttachmentsDescription}

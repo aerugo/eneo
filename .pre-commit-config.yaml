@@ -8,11 +8,15 @@ repos:
         args: [--fix]
         stages: [pre-commit]
         files: ^backend/
-      # Format using project configuration (pyproject.toml)
+      # Auto-format Python with ruff format (Python equivalent of prettier).
+      # Alembic migrations are excluded — they are historical artifacts that
+      # should not change after being deployed (whitespace churn breaks
+      # git blame / bisect on schema history).
       - id: ruff-format
         name: ruff-format
         stages: [pre-commit]
-        files: ^backend/
+        files: ^backend/.*\.py$
+        exclude: ^backend/alembic/
 
   # Pyright type checking via devcontainer
   - repo: local
@@ -32,6 +36,27 @@ repos:
     hooks:
       - id: uv-lock
         args: [--directory, backend]
+
+  # Frontend: auto-format changed files with prettier (writes changes back and re-stages)
+  - repo: local
+    hooks:
+      - id: frontend-format
+        name: frontend-format
+        entry: bash -c 'cd frontend && bunx prettier --write --ignore-unknown "${@/#frontend\//}"' --
+        language: system
+        files: ^frontend/(apps|packages)/[^/]+/.*\.(svelte|ts|tsx|js|jsx|css|scss|json|md|yaml|yml|html)$
+        exclude: ^frontend/[^/]+/[^/]+/(\.svelte-kit|node_modules|build|dist)/
+        stages: [pre-commit]
+
+  # Frontend: lint changed Svelte/TS/JS files
+  - repo: local
+    hooks:
+      - id: frontend-lint
+        name: frontend-lint
+        entry: bash -c 'cd frontend/apps/web && npx eslint --no-warn-ignored "${@/#frontend\/apps\/web\//}"' --
+        language: system
+        files: ^frontend/apps/web/src/.*\.(svelte|ts|js)$
+        stages: [pre-commit]
 
   # Prevent duplicate keys in i18n message files
   - repo: local

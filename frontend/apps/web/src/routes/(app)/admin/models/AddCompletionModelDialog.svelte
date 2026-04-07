@@ -12,7 +12,7 @@
   import { m } from "$lib/paraglide/messages";
 
   export let openController: Writable<boolean>;
-  export let providers: any[] = [];
+  export let providers: { id: string; name: string; [key: string]: unknown }[] = [];
   export let preSelectedProviderId: Writable<string | null> | undefined = undefined;
 
   const intric = getIntric();
@@ -23,8 +23,8 @@
   let showProviderForm = false;
   let modelName = "";
   let displayName = "";
-  let maxInputTokens: number | undefined = undefined;
-  let maxOutputTokens: number | undefined = undefined;
+  let maxInputTokens = "";
+  let maxOutputTokens = "";
   let vision = false;
   let reasoning = false;
   let supportsToolCalling = false;
@@ -39,30 +39,33 @@
   let apiKey = "";
   let endpoint = "";
 
-  $: providerTypes = [
+  const providerTypes = [
     { value: "openai", label: "OpenAI" },
     { value: "azure", label: "Azure OpenAI" },
     { value: "anthropic", label: "Anthropic" },
     { value: "gemini", label: "Google Gemini" },
     { value: "cohere", label: "Cohere" },
     { value: "mistral", label: "Mistral AI" },
-    { value: "hosted_vllm", label: "vLLM" },
+    { value: "hosted_vllm", label: "vLLM" }
   ];
 
   // Create options for provider select - add "Create New" option
   $: providerOptions = [
-    ...providers.map(p => ({ value: p.id, label: p.name })),
+    ...providers.map((p) => ({ value: p.id, label: p.name })),
     { value: CREATE_NEW_PROVIDER, label: m.create_new_provider() }
   ];
 
   // Store for selected provider - initialized once
-  const providerStore = writable<{ value: string; label: string }>({ value: "", label: m.select_provider() });
+  const providerStore = writable<{ value: string; label: string }>({
+    value: "",
+    label: m.select_provider()
+  });
 
   // Initialize provider selection when dialog opens
   $: if ($openController && providerOptions.length > 0) {
     const preselectedId = preSelectedProviderId ? $preSelectedProviderId : null;
     if (preselectedId) {
-      const matchingProvider = providerOptions.find(p => p.value === preselectedId);
+      const matchingProvider = providerOptions.find((p) => p.value === preselectedId);
       if (matchingProvider) {
         providerStore.set(matchingProvider);
       }
@@ -75,7 +78,10 @@
   // Sync selected provider ID and show/hide provider form
   $: {
     if ($providerStore && $providerStore.value) {
-      const value = typeof $providerStore.value === 'object' ? ($providerStore.value as any).value : $providerStore.value;
+      const value =
+        typeof $providerStore.value === "object"
+          ? ($providerStore.value as { value: string }).value
+          : $providerStore.value;
       selectedProviderId = value;
       showProviderForm = value === CREATE_NEW_PROVIDER;
     }
@@ -89,7 +95,13 @@
       throw new Error(m.api_key_required());
     }
 
-    const providerData: any = {
+    const providerData: {
+      name: string;
+      provider_type: string;
+      credentials: { api_key: string };
+      config: Record<string, string>;
+      is_active: boolean;
+    } = {
       name: providerName,
       provider_type: providerType,
       credentials: { api_key: apiKey },
@@ -142,13 +154,13 @@
         provider_id: actualProviderId,
         name: modelName,
         display_name: displayName,
-        max_input_tokens: maxInputTokens,
-        max_output_tokens: maxOutputTokens,
+        max_input_tokens: maxInputTokens ? parseInt(maxInputTokens) : undefined,
+        max_output_tokens: maxOutputTokens ? parseInt(maxOutputTokens) : undefined,
         vision: vision,
         reasoning: reasoning,
         supports_tool_calling: supportsToolCalling,
         is_active: isActive,
-        is_default: isDefault,
+        is_default: isDefault
       });
 
       // Invalidate to reload data
@@ -159,8 +171,8 @@
 
       // Reset form
       resetForm();
-    } catch (e: any) {
-      error = e.message || m.failed_to_create_model();
+    } catch (e: unknown) {
+      error = e instanceof Error ? e.message : m.failed_to_create_model();
     } finally {
       isSubmitting = false;
     }
@@ -169,8 +181,8 @@
   function resetForm() {
     modelName = "";
     displayName = "";
-    maxInputTokens = undefined;
-    maxOutputTokens = undefined;
+    maxInputTokens = "";
+    maxOutputTokens = "";
     vision = false;
     reasoning = false;
     supportsToolCalling = false;
@@ -191,12 +203,6 @@
     error = null;
   }
 
-  function formatTokenLimit(limit: number): string {
-    if (limit >= 1_000_000) return `${(limit / 1_000_000).toFixed(limit % 1_000_000 === 0 ? 0 : 1)}M`;
-    if (limit >= 1_000) return `${Math.round(limit / 1_000)}K`;
-    return limit.toString();
-  }
-
   $: requiresEndpoint = providerType === "azure";
 </script>
 
@@ -207,18 +213,20 @@
     <Dialog.Section>
       <form on:submit|preventDefault={handleSubmit} class="flex flex-col gap-4 p-4">
         {#if error}
-          <div class="border-error bg-error-dimmer text-error-stronger border-l-2 px-4 py-2 text-sm">
+          <div
+            class="border-error bg-error-dimmer text-error-stronger border-l-2 px-4 py-2 text-sm"
+          >
             {error}
           </div>
         {/if}
 
         <!-- Provider Selection -->
         <div class="flex flex-col gap-2">
-          <Select.Root customStore={providerStore} class="border-b border-dimmer">
+          <Select.Root customStore={providerStore} class="border-dimmer border-b">
             <Select.Label>{m.provider()}</Select.Label>
             <Select.Trigger placeholder={m.select_or_create_provider()}></Select.Trigger>
             <Select.Options>
-              {#each providerOptions as provider}
+              {#each providerOptions as provider (provider.value)}
                 <Select.Item value={provider} label={provider.label}>{provider.label}</Select.Item>
               {/each}
             </Select.Options>
@@ -227,7 +235,7 @@
 
         <!-- Provider Creation Form (shown when "+ Create New Provider" is selected) -->
         {#if showProviderForm}
-          <div class="rounded-lg border border-dimmer bg-surface-dimmer p-4 flex flex-col gap-4">
+          <div class="border-dimmer bg-surface-dimmer flex flex-col gap-4 rounded-lg border p-4">
             <h3 class="text-sm font-semibold">{m.new_provider_details()}</h3>
 
             <div class="flex flex-col gap-2">
@@ -248,9 +256,9 @@
               <select
                 id="provider-type"
                 bind:value={providerType}
-                class="rounded border border-dimmer bg-surface px-3 py-2 text-sm"
+                class="border-dimmer bg-surface rounded border px-3 py-2 text-sm"
               >
-                {#each providerTypes as type}
+                {#each providerTypes as type (type.value)}
                   <option value={type.value}>{type.label}</option>
                 {/each}
               </select>
@@ -330,7 +338,9 @@
 
             <div class="grid grid-cols-2 gap-4">
               <div class="flex flex-col gap-2">
-                <label for="max-input-tokens" class="text-sm font-medium">{m.max_input_tokens()}</label>
+                <label for="max-input-tokens" class="text-sm font-medium"
+                  >{m.max_input_tokens()}</label
+                >
                 <Input.Text
                   id="max-input-tokens"
                   type="number"
@@ -343,11 +353,13 @@
                 <p class="text-muted-foreground text-xs">
                   {m.max_input_tokens_help()}
                 </p>
-                <p class="text-xs text-muted">{m.token_reference_input()}</p>
+                <p class="text-muted text-xs">{m.token_reference_input()}</p>
               </div>
 
               <div class="flex flex-col gap-2">
-                <label for="max-output-tokens" class="text-sm font-medium">{m.max_output_tokens()}</label>
+                <label for="max-output-tokens" class="text-sm font-medium"
+                  >{m.max_output_tokens()}</label
+                >
                 <Input.Text
                   id="max-output-tokens"
                   type="number"
@@ -360,7 +372,7 @@
                 <p class="text-muted-foreground text-xs">
                   {m.max_output_tokens_help()}
                 </p>
-                <p class="text-xs text-muted">{m.token_reference_output()}</p>
+                <p class="text-muted text-xs">{m.token_reference_output()}</p>
               </div>
             </div>
 
@@ -397,14 +409,14 @@
       </form>
     </Dialog.Section>
 
-    <Dialog.Controls let:close>
+    <Dialog.Controls>
       <Button variant="outlined" on:click={handleCancel}>{m.cancel()}</Button>
-      <Button
-        variant="primary"
-        on:click={handleSubmit}
-        disabled={isSubmitting}
-      >
-        {isSubmitting ? (showProviderForm ? m.creating_provider_and_model() : m.creating_model()) : m.create()}
+      <Button variant="primary" on:click={handleSubmit} disabled={isSubmitting}>
+        {isSubmitting
+          ? showProviderForm
+            ? m.creating_provider_and_model()
+            : m.creating_model()
+          : m.create()}
       </Button>
     </Dialog.Controls>
   </Dialog.Content>

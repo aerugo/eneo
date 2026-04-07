@@ -85,15 +85,17 @@
           queryParams.folder_path = folderPath;
         }
 
-        const response = await intric.client.fetch(
-          `/api/v1/integrations/${userIntegrationId}/sharepoint/tree/`,
+        /* eslint-disable @typescript-eslint/no-explicit-any */
+        const response = (await intric.client.fetch(
+          `/api/v1/integrations/${userIntegrationId}/sharepoint/tree/` as any,
           {
             method: "get",
             params: {
               query: queryParams
             }
-          }
-        );
+          } as any
+        )) as { items?: TreeItem[] };
+        /* eslint-enable @typescript-eslint/no-explicit-any */
 
         // Ignore stale responses from earlier navigations
         if (thisRequest !== requestId) return;
@@ -152,7 +154,7 @@
   <!-- Breadcrumb -->
   {#if navigationStack.length > 1}
     <nav class="flex min-h-[28px] flex-wrap items-center gap-0.5 text-sm">
-      {#each navigationStack as segment, i}
+      {#each navigationStack as segment, i (i)}
         {#if i > 0}
           <IconChevronRight class="text-secondary h-3 w-3 flex-shrink-0" />
         {/if}

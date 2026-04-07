@@ -8,6 +8,7 @@
   import { getSpacesManager } from "$lib/features/spaces/SpacesManager";
   import { getIntric } from "$lib/core/Intric";
   import { Button } from "@intric/ui";
+  import { resolve } from "$app/paths";
   import { IconLinkExternal } from "@intric/icons/link-external";
   import { IconRefresh } from "@intric/icons/refresh";
   import IntegrationsTable from "./integrations/IntegrationsTable.svelte";
@@ -19,6 +20,7 @@
   import type { IntegrationKnowledge } from "@intric/intric-js";
   import { jobCompletionEvents } from "$lib/features/jobs/JobManager";
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- page data type inferred from layout chain
   let { data } = $props<{ data: any }>();
 
   const intric = getIntric();
@@ -44,9 +46,10 @@
   let isPersonalSpace = $currentSpace.personal;
 
   // Check if user has admin permission
-  let isAdmin = data.user?.predefined_roles?.some((role: any) =>
-    role.permissions?.includes('admin')
-  ) ?? false;
+  let isAdmin =
+    data.user?.predefined_roles?.some((role: { permissions?: string[] }) =>
+      role.permissions?.includes("admin")
+    ) ?? false;
 
   function handleSelectIntegration(integration: IntegrationKnowledge) {
     selectedIntegrationForSyncHistory = integration;
@@ -72,7 +75,7 @@
       // Only show alert if there were errors
       if (response.failed > 0) {
         toast.error(
-          `${response.queued} website${response.queued > 1 ? 's' : ''} queued, ${response.failed} failed. Check console for error details.`
+          `${response.queued} website${response.queued > 1 ? "s" : ""} queued, ${response.failed} failed. Check console for error details.`
         );
         console.error("Bulk recrawl errors:", response.errors);
       }
@@ -86,7 +89,6 @@
     }
     isBulkRecrawling = false;
   }
-
 
   let userCanSeeCollections = $derived($currentSpace.hasPermission("read", "collection"));
   let userCanSeeWebsites = $derived($currentSpace.hasPermission("read", "website"));
@@ -132,15 +134,9 @@
         </p>
       {:else if $selectedTab === "websites" && $currentSpace.hasPermission("create", "website")}
         {#if $selectedWebsiteIds.size > 0}
-          <Button
-            variant="primary"
-            on:click={bulkRecrawl}
-            disabled={isBulkRecrawling}
-          >
+          <Button variant="primary" on:click={bulkRecrawl} disabled={isBulkRecrawling}>
             <IconRefresh size="sm" />
-            {isBulkRecrawling
-              ? m.syncing()
-              : m.sync_selected({ count: $selectedWebsiteIds.size })}
+            {isBulkRecrawling ? m.syncing() : m.sync_selected({ count: $selectedWebsiteIds.size })}
           </Button>
         {:else}
           <WebsiteEditor mode="create"></WebsiteEditor>
@@ -152,20 +148,26 @@
       {:else if $selectedTab === "integrations" && $currentSpace.hasPermission("create", "integrationKnowledge")}
         {#if data.availableIntegrations.length > 0}
           <ImportKnowledgeDialog></ImportKnowledgeDialog>
+        {:else if isPersonalSpace}
+          <Button
+            variant="primary"
+            onclick={() => (window.location.href = resolve("/account/integrations?tab=providers"))}
+          >
+            {m.configure_integrations()}
+          </Button>
+        {:else if isAdmin}
+          <Button
+            variant="primary"
+            onclick={() => (window.location.href = resolve("/admin/integrations?tab=providers"))}
+          >
+            {m.configure_integrations()}
+          </Button>
         {:else}
-          {#if isPersonalSpace}
-            <Button variant="primary" onclick={() => window.location.href = '/account/integrations?tab=providers'}>
-              {m.configure_integrations()}
-            </Button>
-          {:else if isAdmin}
-            <Button variant="primary" onclick={() => window.location.href = '/admin/integrations?tab=providers'}>
-              {m.configure_integrations()}
-            </Button>
-          {:else}
-            <p class="text-secondary max-w-72 text-right text-xs">
-              {isOrgSpace ? m.org_integrations_require_admin() : m.shared_integrations_require_admin()}
-            </p>
-          {/if}
+          <p class="text-secondary max-w-72 text-right text-xs">
+            {isOrgSpace
+              ? m.org_integrations_require_admin()
+              : m.shared_integrations_require_admin()}
+          </p>
         {/if}
       {:else if $selectedTab === "integrations" && !$currentSpace.hasPermission("create", "integrationKnowledge")}
         <p class="text-secondary max-w-72 text-right text-xs">
@@ -198,6 +200,7 @@
               </div>
               <p class="-mt-[0.1rem] max-w-[85ch] pl-6 leading-[1.3rem]">
                 {m.integrations_beta_notice()}
+                <!-- eslint-disable svelte/no-navigation-without-resolve -- external URL -->
                 <a
                   target="_blank"
                   rel="noreferrer"
@@ -205,6 +208,7 @@
                   href={data.environment.integrationRequestFormUrl}
                   >{m.request_integrations_feedback()}
                 </a>
+                <!-- eslint-enable svelte/no-navigation-without-resolve -->
                 <IconLinkExternal class="-mt-0.5 inline" size="sm"></IconLinkExternal>
               </p>
               <div class="flex-grow"></div>
@@ -218,7 +222,8 @@
             </div>
           </div>
         {/if}
-        <IntegrationsTable onSelectIntegrationForSyncHistory={handleSelectIntegration}></IntegrationsTable>
+        <IntegrationsTable onSelectIntegrationForSyncHistory={handleSelectIntegration}
+        ></IntegrationsTable>
         <SyncHistoryDialog
           knowledge={selectedIntegrationForSyncHistory}
           bind:open={showSyncHistoryDialog}
