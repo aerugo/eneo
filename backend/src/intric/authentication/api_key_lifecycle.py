@@ -162,6 +162,7 @@ class ApiKeyLifecycleService:
             key = await self._get_key_or_404(key_id=key_id, tenant_id=user.tenant_id)
             if not skip_manage_authorization:
                 await self.policy_service.ensure_manage_authorized(key=key)
+                await self.policy_service.ensure_ownership_authorized(key=key)
             await self.policy_service.validate_key_state(key=key)
         except ApiKeyValidationError as exc:
             await self._log_lifecycle_failure(
@@ -188,6 +189,7 @@ class ApiKeyLifecycleService:
 
         record = await self.api_key_repo.create(
             tenant_id=key.tenant_id,
+            ownership=key.ownership,
             owner_user_id=key.owner_user_id,
             created_by_user_id=user.id,
             scope_type=key.scope_type,
@@ -265,6 +267,7 @@ class ApiKeyLifecycleService:
             key = await self._get_key_or_404(key_id=key_id, tenant_id=user.tenant_id)
             if not skip_manage_authorization:
                 await self.policy_service.ensure_manage_authorized(key=key)
+                await self.policy_service.ensure_ownership_authorized(key=key)
         except ApiKeyValidationError as exc:
             await self._log_lifecycle_failure(
                 action=ActionType.API_KEY_UPDATED,
@@ -423,6 +426,7 @@ class ApiKeyLifecycleService:
             key = await self._get_key_or_404(key_id=key_id, tenant_id=user.tenant_id)
             if not skip_manage_authorization:
                 await self.policy_service.ensure_manage_authorized(key=key)
+                await self.policy_service.ensure_ownership_authorized(key=key)
         except ApiKeyValidationError as exc:
             await self._log_lifecycle_failure(
                 action=ActionType.API_KEY_SUSPENDED,
@@ -535,6 +539,7 @@ class ApiKeyLifecycleService:
             key = await self._get_key_or_404(key_id=key_id, tenant_id=user.tenant_id)
             if not skip_manage_authorization:
                 await self.policy_service.ensure_manage_authorized(key=key)
+                await self.policy_service.ensure_ownership_authorized(key=key)
         except ApiKeyValidationError as exc:
             await self._log_lifecycle_failure(
                 action=ActionType.API_KEY_REACTIVATED,
@@ -642,6 +647,7 @@ class ApiKeyLifecycleService:
             key = await self._get_key_or_404(key_id=key_id, tenant_id=user.tenant_id)
             if not skip_manage_authorization:
                 await self.policy_service.ensure_manage_authorized(key=key)
+                await self.policy_service.ensure_ownership_authorized(key=key)
         except ApiKeyValidationError as exc:
             await self._log_lifecycle_failure(
                 action=ActionType.API_KEY_REVOKED,
