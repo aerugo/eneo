@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
+
 import pytest
 import sqlalchemy as sa
 
 from intric.database.tables.audit_log_table import AuditLog as AuditLogTable
-from intric.spaces.api.space_models import SpaceRoleValue
 from intric.main.config import get_settings, set_settings
+from intric.spaces.api.space_models import SpaceRoleValue
 from intric.users.user import UserAdd, UserState
 
 # Authenticated endpoint for guardrail/enforcement tests.
