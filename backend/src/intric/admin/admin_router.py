@@ -37,11 +37,13 @@ from intric.authentication.auth_models import (
     ApiKeyCreatedResponse,
     ApiKeyExactLookupRequest,
     ApiKeyExactLookupResponse,
+    ApiKeyExtendRequest,
     ApiKeyNotificationPolicyResponse,
     ApiKeyNotificationPolicyUpdate,
     ApiKeyPermission,
     ApiKeyPolicyResponse,
     ApiKeyPolicyUpdate,
+    ApiKeyRotateRequest,
     ApiKeySearchMatchReason,
     ApiKeyStateChangeRequest,
     ApiKeyUpdateRequest,
@@ -1822,6 +1824,7 @@ async def rotate_api_key_admin(
     http_request: Request,
     container: AdminContainer,
     _guard: None = Depends(require_api_key_permission(ApiKeyPermission.ADMIN)),
+    payload: Annotated[ApiKeyRotateRequest | None, Body()] = None,
 ):
     admin_service = container.admin_service()
     await admin_service.validate_admin_permission()
@@ -1830,6 +1833,7 @@ async def rotate_api_key_admin(
     try:
         return await lifecycle.rotate_key(
             key_id=id,
+            request=payload,
             skip_manage_authorization=True,
             ip_address=ip_address,
             request_id=request_id,
@@ -1837,3 +1841,84 @@ async def rotate_api_key_admin(
         )
     except ApiKeyValidationError as exc:
         raise_api_key_http_error(exc)
+
+
+@router.post(
+    "/api-keys/{id}/extend",
+    response_model=ApiKeyV2,
+    tags=["Admin API Keys"],
+    summary="Change tenant API key expiration",
+    description=(
+        "Change an API key's expiration date. Pass null to remove the expiration "
+        "if the tenant policy allows it."
+    ),
+    responses={
+        200: {
+            "description": "Updated API key.",
+        },
+        **error_responses([400, 401, 403, 404, 429]),
+    },
+)
+async def extend_api_key_expiration_admin(
+    id: UUID,
+    http_request: Request,
+    payload: Annotated[
+        ApiKeyExtendRequest,
+        Body(examples=[{"expires_at": "2030-01-01T00:00:00Z"}]),
+    ],
+    container: AdminContainer,
+    _guard: None = Depends(require_api_key_permission(ApiKeyPermission.ADMIN)),
+):
+    admin_service = container.admin_service()
+    await admin_service.validate_admin_permission()
+    lifecycle: ApiKeyLifecycleService = container.api_key_lifecycle_service()
+    ip_address, request_id, user_agent = extract_audit_context(http_request)
+    try:
+        return await lifecycle.extend_expiration(
+            key_id=id,
+            request=payload,
+            skip_manage_authorization=True,
+            ip_address=ip_address,
+            request_id=request_id,
+            user_agent=user_agent,
+        )
+    except ApiKeyValidationError as exc:
+        raise_api_key_http_error(exc)
+
+
+@router.post(
+    "/api-keys/{id}/purge",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+    tags=["Admin API Keys"],
+    summary="Permanently delete tenant API key",
+    description=(
+        "Permanently delete a revoked or expired API key. Audit history is "
+        "preserved. Active or suspended keys cannot be deleted — revoke them first."
+    ),
+    responses={
+        204: {"description": "API key permanently deleted."},
+        **error_responses([400, 401, 403, 404, 429]),
+    },
+)
+async def purge_api_key_admin(
+    id: UUID,
+    http_request: Request,
+    container: AdminContainer,
+    _guard: None = Depends(require_api_key_permission(ApiKeyPermission.ADMIN)),
+) -> Response:
+    admin_service = container.admin_service()
+    await admin_service.validate_admin_permission()
+    lifecycle: ApiKeyLifecycleService = container.api_key_lifecycle_service()
+    ip_address, request_id, user_agent = extract_audit_context(http_request)
+    try:
+        await lifecycle.purge_key(
+            key_id=id,
+            skip_manage_authorization=True,
+            ip_address=ip_address,
+            request_id=request_id,
+            user_agent=user_agent,
+        )
+    except ApiKeyValidationError as exc:
+        raise_api_key_http_error(exc)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
