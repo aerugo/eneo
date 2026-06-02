@@ -350,6 +350,10 @@ ACTION_METADATA: dict[str, ActionMetadata] = {
         "name_sv": "Transkriptionsmodell raderad",
         "description_sv": "Loggar när en transkriptionsmodell tas bort från tenanten",
     },
+    ActionType.TRANSCRIPTION_MODEL_MIGRATED.value: {
+        "name_sv": "Transkriptionsmodell migrerad",
+        "description_sv": "Loggar när användning flyttas mellan transkriptionsmodeller",
+    },
     ActionType.TEMPLATE_CREATED.value: {
         "name_sv": "Mall skapad",
         "description_sv": "Loggar när en ny mall skapas",
