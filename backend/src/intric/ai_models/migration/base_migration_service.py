@@ -138,6 +138,7 @@ class BaseModelMigrationService:
         *,
         user: Any,
         confirm_migration: bool = False,
+        force_override: bool = False,
     ) -> MigrationResult:
         start_time = datetime.now(timezone.utc)
         migration_id = uuid4()
@@ -152,6 +153,7 @@ class BaseModelMigrationService:
                 "user_id": str(user.id),
                 "entity_types": entity_types,
                 "confirm_migration": confirm_migration,
+                "force_override": force_override,
             },
         )
 
@@ -285,11 +287,13 @@ class BaseModelMigrationService:
                 from_model_id, to_model_id, user.tenant_id
             )
 
+            # Security blockers cannot be overridden with confirm_migration —
+            # only the explicit force_override escape hatch bypasses them.
             has_blockers = any(
                 self._is_blocker_code(code) for code in validation_result.warning_codes
             )
 
-            if has_blockers:
+            if has_blockers and not force_override:
                 duration = (datetime.now(timezone.utc) - start_time).total_seconds()
                 await self.history_repo.update_migration_history(
                     migration_id=migration_id,
@@ -304,6 +308,18 @@ class BaseModelMigrationService:
                 )
                 raise ValidationException(
                     f"Migration blocked by security classification: {', '.join(validation_result.warnings)}"
+                )
+
+            if has_blockers and force_override:
+                self.logger.warning(
+                    f"User force-overrode security classification blocker: {', '.join(validation_result.warnings)}",
+                    extra={
+                        "migration_id": str(migration_id),
+                        "from_model_id": str(from_model_id),
+                        "to_model_id": str(to_model_id),
+                        "force_override": True,
+                        "warnings": validation_result.warnings,
+                    },
                 )
 
             if not validation_result.compatible and not confirm_migration:
@@ -569,7 +585,14 @@ class BaseModelMigrationService:
                 select(Users.id).where(Users.tenant_id == tenant_id)
             )
         elif entity_type in {"assistant_templates", "app_templates"}:
-            return true()
+            # Templates carry their own tenant_id and soft-delete marker. Scope
+            # strictly to this tenant and skip soft-deleted rows so a migration
+            # never counts or rebinds another tenant's or an already-deleted
+            # template. Keep in sync with the usage service's copy.
+            return and_(
+                table.tenant_id == tenant_id,
+                table.deleted_at.is_(None),
+            )
         elif entity_type == "spaces":
             return table.tenant_id == tenant_id
         else:
