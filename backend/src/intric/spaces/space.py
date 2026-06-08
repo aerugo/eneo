@@ -3,6 +3,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any, Optional, Union
 from uuid import UUID
 
+from intric.main.datetime_utils import datetime_or_utc_min
 from intric.main.exceptions import (
     BadRequestException,
     KnowledgeModelUnavailableException,
@@ -175,7 +176,7 @@ class Space:
                 for embedding_model in self.embedding_models
                 if embedding_model.can_access
             ],
-            key=lambda model: model.created_at or datetime.min,
+            key=lambda model: datetime_or_utc_min(model.created_at),
             reverse=True,
         )
 
@@ -197,7 +198,7 @@ class Space:
                 for completion_model in self.completion_models
                 if completion_model.can_access
             ],
-            key=lambda model: model.created_at or datetime.min,
+            key=lambda model: datetime_or_utc_min(model.created_at),
             reverse=True,
         )
 
@@ -219,7 +220,7 @@ class Space:
                 for transcription_model in self.transcription_models
                 if transcription_model.can_access
             ],
-            key=lambda model: model.created_at or datetime.min,
+            key=lambda model: datetime_or_utc_min(model.created_at),
             reverse=True,
         )
 

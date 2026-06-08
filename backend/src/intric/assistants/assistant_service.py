@@ -822,7 +822,7 @@ class AssistantService:
                                                     dict[str, object] | None,
                                                     tc.arguments,
                                                 ),
-                                                tool_call_id=tc.tool_call_id or "",
+                                                tool_call_id=tc.tool_call_id,
                                                 approved=tc.approved,
                                                 result_status=tc.result_status,
                                                 result=tc.result,
@@ -842,7 +842,7 @@ class AssistantService:
                                             arguments=cast(
                                                 dict[str, object] | None, tc.arguments
                                             ),
-                                            tool_call_id=tc.tool_call_id or "",
+                                            tool_call_id=tc.tool_call_id,
                                             approved=None,
                                             result_status=tc.result_status,
                                             mcp_tool_name=tc.mcp_tool_name,
@@ -876,7 +876,7 @@ class AssistantService:
                                                     dict[str, object] | None,
                                                     tc.arguments,
                                                 ),
-                                                tool_call_id=tc.tool_call_id or "",
+                                                tool_call_id=tc.tool_call_id,
                                                 approved=False,
                                                 result_status=tc.result_status
                                                 or "timeout_denied",
