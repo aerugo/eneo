@@ -186,14 +186,16 @@
                   <Command.Item
                     value={`website:${website.id}`}
                     onSelect={() => selectAndClose(() => onAddWebsite(website))}
-                    class={pagesFailed > 0 ? "bg-orange-50 dark:bg-orange-950" : undefined}
+                    class={pagesFailed > 0
+                      ? "border-negative-default bg-negative-default/10 border-l-4"
+                      : undefined}
                   >
                     <IconWeb class="shrink-0" />
                     <span class="flex-grow truncate">{formatWebsiteName(website)}</span>
                     {#if pagesFailed > 0}
                       <Badge
                         variant="outline"
-                        class="border-orange-300 text-orange-700 dark:border-orange-600 dark:text-orange-300"
+                        class="border-negative-default/30 text-negative-stronger"
                       >
                         {m.pages_failed({ count: pagesFailed })}
                       </Badge>

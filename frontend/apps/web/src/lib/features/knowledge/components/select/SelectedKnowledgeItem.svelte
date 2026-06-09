@@ -76,10 +76,10 @@
   class="border-default bg-primary w-full overflow-hidden rounded-xl border transition-shadow duration-150 hover:shadow-sm"
 >
   <div
-    class="flex h-14 w-full items-center gap-2 px-3"
+    class="flex h-14 w-full items-center gap-2 px-3 {hasFailures
+      ? 'border-negative-default bg-negative-default/10 border-l-4'
+      : ''}"
     class:text-negative-default={!modelEnabled}
-    class:bg-orange-50={hasFailures}
-    class:dark:bg-orange-950={hasFailures}
   >
     {#if expandable}
       <Collapsible.Trigger
@@ -111,10 +111,7 @@
 
     {#if kind === "website"}
       {#if hasFailures}
-        <Badge
-          variant="outline"
-          class="border-orange-300 text-orange-700 dark:border-orange-600 dark:text-orange-300"
-        >
+        <Badge variant="outline" class="border-negative-default/30 text-negative-stronger">
           {m.pages_failed({ count: pagesFailed })}
         </Badge>
       {/if}
