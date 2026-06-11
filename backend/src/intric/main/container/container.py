@@ -100,6 +100,18 @@ from intric.group_chat.presentation.assemblers.group_chat_assembler import (
 )
 from intric.groups_legacy.group_repo import GroupRepository
 from intric.groups_legacy.group_service import GroupService
+from intric.help_assistants.application.helper_run_service import HelperRunService
+from intric.help_assistants.application.org_space_assistant_role_service import (
+    OrgSpaceAssistantRoleService,
+)
+from intric.help_assistants.domain.factory import HelperAssistantsFactory
+from intric.help_assistants.infrastructure.help_assistant_assignment_history_repo import (
+    HelpAssistantAssignmentHistoryRepo,
+)
+from intric.help_assistants.infrastructure.helper_run_repo import HelperRunRepo
+from intric.help_assistants.infrastructure.org_space_assistant_role_repo import (
+    OrgSpaceAssistantRoleRepo,
+)
 from intric.icons.icon_repo import IconRepository
 from intric.icons.icon_service import IconService
 from intric.info_blobs.info_blob_chunk_repo import InfoBlobChunkRepo
@@ -482,6 +494,7 @@ class Container(containers.DeclarativeContainer):
     assistant_template_factory = providers.Factory(AssistantTemplateFactory)
     app_template_factory = providers.Factory(AppTemplateFactory)
     feature_flag_factory = providers.Factory(FeatureFlagFactory)
+    helper_assistants_factory = providers.Factory(HelperAssistantsFactory)
 
     # App factory must be defined before it's used by the space factory
     app_factory = providers.Factory(
@@ -583,6 +596,21 @@ class Container(containers.DeclarativeContainer):
     settings_repo = providers.Factory(SettingsRepository, session=session)
     prompt_repo = providers.Factory(
         PromptRepository, session=session, factory=prompt_factory
+    )
+    org_space_assistant_role_repo = providers.Factory(
+        OrgSpaceAssistantRoleRepo,
+        session=session,
+        factory=helper_assistants_factory,
+    )
+    help_assistant_assignment_history_repo = providers.Factory(
+        HelpAssistantAssignmentHistoryRepo,
+        session=session,
+        factory=helper_assistants_factory,
+    )
+    helper_run_repo = providers.Factory(
+        HelperRunRepo,
+        session=session,
+        factory=helper_assistants_factory,
     )
 
     api_key_repo = providers.Factory(ApiKeysRepository, session=session)
@@ -1087,7 +1115,36 @@ class Container(containers.DeclarativeContainer):
         completion_service=completion_service,
         references_service=references_service,
         icon_repo=icon_repo,
+        org_space_assistant_role_repo=org_space_assistant_role_repo,
+        help_assistant_assignment_history_repo=help_assistant_assignment_history_repo,
         api_key_scope_revoker=api_key_scope_revoker,
+    )
+    org_space_assistant_role_service = providers.Factory(
+        OrgSpaceAssistantRoleService,
+        user=user,
+        role_repo=org_space_assistant_role_repo,
+        history_repo=help_assistant_assignment_history_repo,
+        assistant_service=assistant_service,
+        assistant_repo=assistant_repo,
+        prompt_service=prompt_service,
+        users_repo=user_repo,
+        completion_model_crud_service=completion_model_crud_service,
+        space_service=space_service,
+        audit_service=audit_service,
+        factory=helper_assistants_factory,
+    )
+    helper_run_service = providers.Factory(
+        HelperRunService,
+        user=user,
+        helper_run_repo=helper_run_repo,
+        role_service=org_space_assistant_role_service,
+        assistant_service=assistant_service,
+        session_repo=session_repo,
+        question_repo=question_repo,
+        completion_service=completion_service,
+        references_service=references_service,
+        factory=helper_assistants_factory,
+        audit_service=audit_service,
     )
     group_chat_service = providers.Factory(
         GroupChatService,
