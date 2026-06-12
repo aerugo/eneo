@@ -11,7 +11,7 @@
   import { m } from "$lib/paraglide/messages";
 
   export let label = m.select_documents_to_attach();
-  let selectedFiles: FileList;
+  let fileInput: HTMLInputElement;
 
   const {
     state: { attachmentRules },
@@ -19,10 +19,11 @@
   } = getAttachmentManager();
 
   function uploadFiles() {
-    if (!selectedFiles) return;
-    // Validation errors surface inline via the manager's `uploadError` store
-    // (rendered next to the chat input), not as a transient toast.
-    queueValidUploads([...selectedFiles]);
+    if (!fileInput.files?.length) return;
+
+    queueValidUploads([...fileInput.files]);
+    // Reset so re-selecting the same file still fires `change`.
+    fileInput.value = "";
   }
 </script>
 
@@ -35,7 +36,7 @@
   <input
     type="file"
     accept={$attachmentRules.acceptString}
-    bind:files={selectedFiles}
+    bind:this={fileInput}
     multiple
     on:change={uploadFiles}
     class="sr-only"
