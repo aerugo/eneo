@@ -10955,7 +10955,8 @@ export interface components {
       | 9037
       | 9038
       | 9039
-      | 9040;
+      | 9040
+      | 9041;
     /**
      * ExpiringKeySummaryItem
      * @description Lightweight summary of a single expiring API key.
@@ -15744,6 +15745,7 @@ export interface components {
       input_cost_per_token?: number | string | null;
       /** Output Cost Per Token */
       output_cost_per_token?: number | string | null;
+      model_kwargs_capabilities?: components["schemas"]["SupportedModelKwargs"] | null;
       security_classification?: components["schemas"]["ModelId"] | null;
     };
     /** TenantCompletionModelUpdate */
@@ -15774,6 +15776,7 @@ export interface components {
       input_cost_per_token?: number | string | null;
       /** Output Cost Per Token */
       output_cost_per_token?: number | string | null;
+      model_kwargs_capabilities?: components["schemas"]["SupportedModelKwargs"] | null;
       /** Is Default */
       is_default?: boolean | null;
       security_classification?: components["schemas"]["ModelId"] | null;
