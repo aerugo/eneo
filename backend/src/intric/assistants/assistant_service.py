@@ -7,6 +7,7 @@ from uuid import UUID
 
 from intric.ai_models.completion_models.completion_model import (
     Completion,
+    McpToolReference,
     ModelKwargs,
     ResponseType,
     TokenUsage,
@@ -1029,6 +1030,11 @@ class AssistantService:
                 reasoning_string = ""
                 generated_files: list[File] = []
                 tool_calls: list[ToolCallInfo] = []
+                mcp_tool_references: list[McpToolReference] = []
+                # TOOL_CALL chunks can fire twice in the approval flow. IDs
+                # identify exact events without collapsing distinct resources
+                # that legitimately share a URI.
+                mcp_ref_seen: set[UUID] = set()
                 stream_usage: TokenUsage | None = None
                 completed = False
 
@@ -1073,6 +1079,12 @@ class AssistantService:
                             yield chunk
 
                         if chunk.response_type == ResponseType.TOOL_CALL:
+                            if chunk.mcp_tool_references:
+                                for ref in chunk.mcp_tool_references:
+                                    if ref.id in mcp_ref_seen:
+                                        continue
+                                    mcp_ref_seen.add(ref.id)
+                                    mcp_tool_references.append(ref)
                             if chunk.tool_calls_metadata:
                                 for tc in chunk.tool_calls_metadata:
                                     # Check if this tool_call already exists (from TOOL_APPROVAL_REQUIRED)
@@ -1107,6 +1119,7 @@ class AssistantService:
                                             ToolCallInfo(
                                                 server_name=tc.server_name,
                                                 tool_name=tc.tool_name,
+                                                title=tc.title,
                                                 arguments=cast(
                                                     dict[str, object] | None,
                                                     tc.arguments,
@@ -1149,6 +1162,7 @@ class AssistantService:
                                             ToolCallInfo(
                                                 server_name=tc.server_name,
                                                 tool_name=tc.tool_name,
+                                                title=tc.title,
                                                 arguments=cast(
                                                     dict[str, object] | None,
                                                     tc.arguments,
@@ -1183,6 +1197,7 @@ class AssistantService:
                                             ToolCallInfo(
                                                 server_name=tc.server_name,
                                                 tool_name=tc.tool_name,
+                                                title=tc.title,
                                                 arguments=cast(
                                                     dict[str, object] | None,
                                                     tc.arguments,
@@ -1250,6 +1265,7 @@ class AssistantService:
                         or LoggingDetails(model_kwargs={}),
                         web_search_results=list(web_search_results or []),
                         tool_calls=tool_calls if tool_calls else None,
+                        mcp_tool_references=mcp_tool_references or None,
                         reasoning=reasoning_string or None,
                     )
                     completed = True
@@ -1310,6 +1326,7 @@ class AssistantService:
             final_reasoning: str | None = None
             generated_files: list[File] = []
 
+            non_streaming_mcp_refs: list[McpToolReference] = []
             if response.completion is not None:
                 answer = response.completion
                 if isinstance(answer, str):
@@ -1317,6 +1334,9 @@ class AssistantService:
                 else:
                     reasoning_token_count = getattr(answer, "reasoning_token_count", 0)
                     final_answer = getattr(answer, "text", "")
+                    non_streaming_mcp_refs = (
+                        getattr(answer, "mcp_tool_references", None) or []
+                    )
                     final_reasoning = getattr(answer, "reasoning_content", None)
 
             reference_chunks = get_references(
@@ -1365,6 +1385,7 @@ class AssistantService:
                 logging_details=response.extended_logging
                 or LoggingDetails(model_kwargs={}),
                 web_search_results=list(web_search_results or []),
+                mcp_tool_references=non_streaming_mcp_refs or None,
                 reasoning=final_reasoning,
             )
 
@@ -1683,9 +1704,12 @@ class AssistantService:
             assistant_selector_tokens=assistant_selector_tokens,
         )
 
+        mcp_tool_references: list[McpToolReference] = []
         if not stream:
             assert isinstance(answer, str)
             info_blob_references = datastore_result.info_blobs
+            if isinstance(response.completion, Completion):
+                mcp_tool_references = response.completion.mcp_tool_references or []
         else:
             info_blob_references = datastore_result.info_blobs
 
@@ -1704,6 +1728,7 @@ class AssistantService:
             description=assistant_to_ask.description,
             web_search_results=web_search_results,
             question_id=question_id,
+            mcp_tool_references=mcp_tool_references,
         )
 
         return final_response

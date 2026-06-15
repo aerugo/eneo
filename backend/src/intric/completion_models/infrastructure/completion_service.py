@@ -251,9 +251,17 @@ class CompletionService:
 
         # Create MCP proxy session before building the context, so the tool
         # definitions it will register can be counted toward the token budget.
+        # Pass the chat session id + active DB session so each MCP server's
+        # protocol-assigned ``mcp-session-id`` resumes across user turns
+        # (persisted in ``chat_session_mcp_state``). Behavior is identical for
+        # every MCP server, with no per-server-kind branching.
         mcp_proxy: MCPProxySession | None = None
         if mcp_servers:
-            mcp_proxy = self._mcp_proxy_factory.create(mcp_servers)
+            mcp_proxy = self._mcp_proxy_factory.create(
+                mcp_servers,
+                chat_session_id=session.id if session is not None else None,
+                db_session=self.session,
+            )
             logger.debug(
                 f"[MCP] Proxy created with {mcp_proxy.get_tool_count()} tools from {len(mcp_servers)} server(s)"
             )
