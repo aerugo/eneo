@@ -14157,8 +14157,10 @@ export interface components {
      *
      *     Inherits the "exactly one target" rule from `_ConversationTarget`. Adds
      *     its own rule that at least one of `question` or `file_ids` must be
-     *     non-empty — an empty preflight would still trigger a model lookup with
-     *     no useful answer.
+     *     non-empty, except for a bare assistant target. That empty assistant request
+     *     is useful: it returns the assistant's always-present prompt/attachment
+     *     baseline for a brand-new chat. `assistant_prompt` is an optional config-time
+     *     override for that assistant baseline, used before prompt edits are saved.
      */
     PreflightRequest: {
       /** Session Id */
@@ -14178,6 +14180,8 @@ export interface components {
        */
       file_ids?: string[];
       tools?: components["schemas"]["UseTools"] | null;
+      /** Assistant Prompt */
+      assistant_prompt?: string | null;
     };
     /**
      * PreflightResponse
@@ -14211,6 +14215,21 @@ export interface components {
       model_name: string;
       /** Context Window */
       context_window: number;
+      /**
+       * Context Reserve Tokens
+       * @default 0
+       */
+      context_reserve_tokens?: number;
+      /**
+       * Assistant Attachment Tokens
+       * @default 0
+       */
+      assistant_attachment_tokens?: number;
+      /**
+       * Prompt Tokens
+       * @default 0
+       */
+      prompt_tokens?: number;
     };
     /** PrivacyPolicy */
     PrivacyPolicy: {

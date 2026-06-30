@@ -52,19 +52,25 @@ class PreflightRequest(_ConversationTarget):
 
     Inherits the "exactly one target" rule from `_ConversationTarget`. Adds
     its own rule that at least one of `question` or `file_ids` must be
-    non-empty — an empty preflight would still trigger a model lookup with
-    no useful answer.
+    non-empty, except for a bare assistant target. That empty assistant request
+    is useful: it returns the assistant's always-present prompt/attachment
+    baseline for a brand-new chat. `assistant_prompt` is an optional config-time
+    override for that assistant baseline, used before prompt edits are saved.
     """
 
     question: str = ""
     file_ids: list[UUID] = Field(default=[], max_length=_MAX_FILES_PER_PREFLIGHT)
     tools: Optional[UseTools] = None
+    assistant_prompt: Optional[str] = None
 
     @model_validator(mode="after")
     def _require_question_or_files(self) -> "PreflightRequest":
         if not self.question and not self.file_ids:
+            if self.assistant_id is not None:
+                return self
             raise ValueError(
-                "Preflight requires at least one of `question` or `file_ids`."
+                "Preflight requires at least one of `question` or `file_ids`, "
+                "except for assistant baseline requests."
             )
         return self
 
@@ -92,6 +98,18 @@ class PreflightResponse(BaseModel):
     excluded_file_count: int = 0
     model_name: str
     context_window: int
+    # Tokens kept free for the live question; persistent content (prompt +
+    # attachments) must fit within context_window - context_reserve_tokens. Lets
+    # a client draw the "won't fit" line without hardcoding the policy.
+    context_reserve_tokens: int = 0
+    # Persistent baseline for an assistant target: the system prompt and the
+    # attachments sent on EVERY question. 0 for session/group-chat targets.
+    # Kept separate from input_tokens/file_tokens (the per-message delta) so a
+    # caller showing both never double-counts. The config-time meter reads the
+    # live per-message file_tokens for accuracy on unsaved edits; these report
+    # the always-present baseline for callers that need it (e.g. a turn-1 view).
+    assistant_attachment_tokens: int = 0
+    prompt_tokens: int = 0
 
 
 class ConversationRequest(_ConversationTarget):

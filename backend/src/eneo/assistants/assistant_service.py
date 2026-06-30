@@ -1,6 +1,7 @@
 import re
 from collections import defaultdict
 from collections.abc import AsyncGenerator, Callable, Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional, TypeVar, Union, cast
 from uuid import UUID
@@ -19,9 +20,13 @@ from eneo.assistants.assistant_repo import AssistantRepository
 from eneo.authentication.api_key_scope_revoker import ApiKeyScopeRevoker
 from eneo.authentication.auth_models import ApiKeyScopeType, ApiKeyStateReasonCode
 from eneo.authentication.auth_service import AuthService
-from eneo.completion_models.infrastructure.context_builder import count_tokens
+from eneo.completion_models.infrastructure.context_builder import (
+    count_attachment_tokens,
+    count_tokens,
+)
 from eneo.completion_models.infrastructure.web_search import WebSearch
-from eneo.files.file_models import FileType
+from eneo.files.attachment_budget import attachment_token_ceiling
+from eneo.files.file_models import File, FileType
 from eneo.files.file_service import FileService
 from eneo.governance_policy.domain.policy_resolver import (
     select_effective_completion_model,
@@ -103,6 +108,13 @@ if TYPE_CHECKING:
     from eneo.spaces.space_repo import SpaceRepository
 
 logger = get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class AssistantCompletionFileInputs:
+    completion_message_files: list[File]
+    completion_prompt_files: list[File]
+
 
 AT_TAG_PATTERN = r"<eneo-at-tag: @[^>]+>"
 REFERENCE_PATTERN = r'<inref id="([0-9a-f]{8})"/>'  # noqa
@@ -380,6 +392,9 @@ class AssistantService:
         attachments = await self.file_service.get_files_by_ids(
             file_ids=template_data.get_ids_by_type(wizard_type=WizardType.attachments)
         )
+        # __init__ sets attachments directly, bypassing the setter, so enforce
+        # the same persisted attachment contract explicitly on the template path.
+        Assistant.validate_attachments(attachments)
         collections = [
             space.get_collection(collection_id=group_id)
             for group_id in template_data.get_ids_by_type(wizard_type=WizardType.groups)
@@ -406,11 +421,147 @@ class AssistantService:
             description=template.description,
         )
 
+        # Validate before persisting: the factory-built assistant already carries
+        # the final model + attachments, so a set that doesn't fit is rejected
+        # without leaving an invalid row behind.
+        await self._validate_attachments_fit(assistant, space=space)
+
         space.add_assistant(assistant)
         refreshed_space = await self.space_repo.update(space)
         assistant = refreshed_space.get_assistant(assistant.id)
 
         return assistant
+
+    async def _completion_prompt_files_for_model(
+        self,
+        persistent_attachments: list[File],
+        completion_model: Optional["CompletionModel"],
+    ) -> list[File]:
+        if (
+            completion_model is None
+            or not completion_model.vision
+            or not persistent_attachments
+        ):
+            return persistent_attachments
+
+        return await self.file_service.with_derived_images(persistent_attachments)
+
+    async def _validate_attachments_fit(
+        self, assistant: Assistant, *, space: "Space"
+    ) -> None:
+        """Reject saving when the system prompt + persistent attachments don't
+        fit the model's context window with room left to ask a question.
+
+        Validates the model, prompt and file set that ask() will ACTUALLY send,
+        so the save can't admit a configuration the request would then reject:
+        - Governance: for a governed personal-default assistant, the
+          governance-effective model and enforced prompt — not the assistant's
+          own — mirroring the resolution in ask().
+        - Vision: the persistent attachments expanded with their
+          document-derived images.
+
+        Attachments are sent whole (never truncated), so a set that doesn't fit
+        can't run — a clear rejection beats silently sending part of a document.
+        The prompt counts toward the ceiling on its own, so a prompt that alone
+        overflows is rejected even with no attachments. Skipped only when no
+        model is resolved."""
+        model = assistant.completion_model
+        enforced_prompt: str | None = None
+
+        # Mirror ask()'s governance resolution so the fit check uses the model
+        # and prompt the request will really send, not the assistant's own.
+        effective_config = await self._resolve_effective_config(
+            space=space, assistant=assistant
+        )
+        if effective_config is not None:
+            if effective_config.models_enforced:
+                resolved_model = select_effective_completion_model(
+                    current_model=model, effective_config=effective_config
+                )
+                if resolved_model is not None:
+                    model = resolved_model  # type: ignore[assignment]
+            if (
+                effective_config.prompt_enforced
+                and effective_config.enforced_prompt_text
+            ):
+                enforced_prompt = effective_config.enforced_prompt_text
+
+        if model is None:
+            return
+
+        prompt_text = (
+            enforced_prompt
+            if enforced_prompt is not None
+            else assistant.get_prompt_text()
+        )
+        completion_prompt_files = await self._completion_prompt_files_for_model(
+            persistent_attachments=assistant.attachments,
+            completion_model=model,
+        )
+        self._assert_files_fit_context(
+            model=model,
+            prompt_text=prompt_text,
+            files=completion_prompt_files,
+        )
+
+    def _assert_files_fit_context(
+        self,
+        *,
+        model: "CompletionModel",
+        prompt_text: str,
+        files: list["File"],
+    ) -> None:
+        """Reject when the system prompt + whole files exceed the model's input
+        window with room left to ask. Files are inlined whole (never truncated),
+        so a set that doesn't fit can't run — a clear rejection beats a
+        provider-side context-length error. Pass files already expanded with any
+        document-derived images, since that is what the request sends. Shared by
+        the save-time persistent check and the per-message ask-time check."""
+        ceiling = attachment_token_ceiling(model.max_input_tokens)
+        used = count_tokens(prompt_text, model.name) + count_attachment_tokens(
+            text_files=[f for f in files if f.file_type == FileType.TEXT],
+            image_files=[f for f in files if f.file_type == FileType.IMAGE],
+            model_name=model.name,
+        )
+        if used > ceiling:
+            raise BadRequestException(
+                f"The prompt and attachments need ~{used} tokens, but only "
+                f"{ceiling} fit this model's context window. Remove content or "
+                f"choose a model with a larger context."
+            )
+
+    async def _assert_message_attachments_fit(
+        self,
+        *,
+        assistant: "Assistant",
+        model: "CompletionModel",
+        prompt_text: str,
+        files: list["File"],
+    ) -> None:
+        """Per-message ask-time guard. Persistent attachments are gated on save,
+        but a chat message's own uploads are not — and they are now inlined whole
+        on the send and on every later replay. Count the persistent baseline plus
+        this message's files (both expanded with derived images, as the request
+        sends them) against the same ceiling, so an upload that can't fit is
+        rejected up front instead of failing at the provider. No uploads this
+        turn means nothing new to check: the baseline was validated on save and
+        history is budget-evicted downstream."""
+        if not files:
+            return
+        persistent_files = await self._completion_prompt_files_for_model(
+            persistent_attachments=assistant.attachments,
+            completion_model=model,
+        )
+        message_files = (
+            await self.file_service.with_derived_images(files)
+            if model.vision
+            else files
+        )
+        self._assert_files_fit_context(
+            model=model,
+            prompt_text=prompt_text,
+            files=persistent_files + message_files,
+        )
 
     async def get_completion_model(self, space: "Space") -> Optional["CompletionModel"]:
         """Get a completion model for the space. Returns None if no model is available."""
@@ -730,6 +881,18 @@ class AssistantService:
             knowledge_changing=knowledge_changing,
         )
 
+        # Validate before persisting (the in-memory assistant already reflects the
+        # final model + prompt + attachments from update() above), so a save that
+        # no longer fits — after switching to a smaller-context model OR enlarging
+        # the prompt (which counts toward the ceiling) — is rejected without
+        # committing an invalid row.
+        if (
+            attachments is not None
+            or completion_model is not None
+            or prompt_obj is not None
+        ):
+            await self._validate_attachments_fit(assistant, space=space)
+
         refreshed_space = await self.space_repo.update(space)
         assistant = refreshed_space.get_assistant(assistant_id=assistant_id)
 
@@ -828,6 +991,23 @@ class AssistantService:
             current_model=assistant.completion_model,
             effective_config=effective_config,
         )
+
+    async def get_preflight_baseline(
+        self, assistant_id: UUID
+    ) -> tuple[str, list[File]]:
+        """The always-present cost of an assistant: its system prompt text and
+        its persistent attachments, which ride along on every question.
+
+        Preflight uses this so the meter can show the baseline, not just the
+        per-message delta. Applies the same read authorization as
+        get_effective_completion_model (including the personal-default carve-out)
+        so it can't probe assistants the caller cannot access.
+        """
+        space = await self.space_repo.get_space_by_assistant(assistant_id=assistant_id)
+        assistant = space.get_assistant(assistant_id=assistant_id)
+        self._authorize_read_assistant(space=space, assistant=assistant)
+
+        return assistant.get_prompt_text(), assistant.attachments
 
     async def is_help_assistant(self, assistant_id: UUID) -> bool:
         """Whether ``assistant_id`` currently fills a Help Assistant role.
@@ -1383,35 +1563,37 @@ class AssistantService:
 
             return final_answer
 
-    async def _with_vision_derivatives(
+    async def _build_completion_file_inputs(
         self,
         files: list["File"],
         session: "SessionInDB",
         assistant: "Assistant",
         completion_model: Optional["CompletionModel"],
-    ) -> list["File"]:
-        """Give the completion the images derived from document attachments.
+    ) -> AssistantCompletionFileInputs:
+        """Build the file lists passed to the completion layer.
 
-        Expands the current files, the assistant's fixed attachments and the
-        session history. Derived images are a completion-side concern only:
-        they are never persisted on the question or returned as user
-        attachments. Gates on the model that will actually answer — the
-        governance-effective model, which can differ from the assistant's own
-        in vision support. When that model lacks vision everything passes
-        through untouched, so a PDF with images still works as a plain text
-        attachment.
+        Persistent attachments stay on ``assistant.attachments``. Rendered
+        document images are a completion-side concern only: they are added to
+        the message and prompt file inputs when the effective model has vision,
+        but they are never persisted on the question or assistant.
         """
         if completion_model is None or not completion_model.vision:
-            return files
-
-        if assistant.attachments:
-            assistant.attachments = await self.file_service.with_derived_images(
-                assistant.attachments
+            return AssistantCompletionFileInputs(
+                completion_message_files=files,
+                completion_prompt_files=assistant.attachments,
             )
+
+        completion_prompt_files = await self._completion_prompt_files_for_model(
+            persistent_attachments=assistant.attachments,
+            completion_model=completion_model,
+        )
 
         await self._attach_history_derivatives(session=session)
 
-        return await self.file_service.with_derived_images(files)
+        return AssistantCompletionFileInputs(
+            completion_message_files=await self.file_service.with_derived_images(files),
+            completion_prompt_files=completion_prompt_files,
+        )
 
     async def _attach_history_derivatives(self, session: "SessionInDB") -> None:
         """Re-attach derived images to history messages for replay.
@@ -1610,6 +1792,20 @@ class AssistantService:
                 "No completion model configured for this conversation.",
             )
 
+        # This message's own uploads have no save-time fit gate and are inlined
+        # whole, so reject an upload that can't fit before any session/question
+        # row is created — same "fail before persisting" carve-out as governance.
+        await self._assert_message_attachments_fit(
+            assistant=assistant_to_ask,
+            model=effective_completion_model,
+            prompt_text=(
+                prompt_override
+                if prompt_override is not None
+                else assistant_to_ask.get_prompt_text()
+            ),
+            files=files,
+        )
+
         if session_id is not None:
             if group_chat_id is not None:
                 session = await self.session_service.get_session_by_uuid(
@@ -1637,10 +1833,9 @@ class AssistantService:
         for _question in session.questions:
             _question.question = clean_eneo_tag(_question.question)
 
-        # `files` (the user's own attachments) is what gets persisted and
-        # returned; `completion_files` additionally carries derived images
-        # (e.g. rendered PDF pages) that only the model should see.
-        completion_files = await self._with_vision_derivatives(
+        # `files` is what gets persisted on the question. The completion inputs
+        # may additionally contain rendered document images that only the model sees.
+        completion_file_inputs = await self._build_completion_file_inputs(
             files=files,
             session=session,
             assistant=assistant_to_ask,
@@ -1669,7 +1864,7 @@ class AssistantService:
             completion_service=self.completion_service,
             references_service=self.references_service,
             session=session,
-            files=completion_files,
+            files=completion_file_inputs.completion_message_files,
             stream=stream,
             version=version,
             web_search_results=web_search_results,
@@ -1677,6 +1872,7 @@ class AssistantService:
             completion_model_override=completion_model_override,
             mcp_servers_override=mcp_servers_override,
             prompt_override=prompt_override,
+            completion_prompt_files=completion_file_inputs.completion_prompt_files,
         )
 
         # TODO: Separate the response based on stream true or false

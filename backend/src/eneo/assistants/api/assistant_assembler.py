@@ -23,6 +23,7 @@ from eneo.files.text import TextMimeTypes
 from eneo.integration.presentation.assemblers.integration_knowledge_assembler import (
     IntegrationKnowledgeAssembler,
 )
+from eneo.main.config import get_settings
 from eneo.mcp_servers.presentation.assemblers.mcp_server_assembler import (
     MCPServerAssembler,
 )
@@ -76,12 +77,22 @@ class AssistantAssembler:
         ]
 
     def _get_allowed_attachments(self):
+        # max_files/max_size are abuse + storage guardrails. The binding limit is
+        # the context-fit ceiling (prompt + attachments must fit the model's
+        # window minus a reserve), but that depends on the live-selected model's
+        # window, so the config meter computes it client-side from the preflight
+        # reserve rather than advertising a value here against a stale saved model.
+        settings = get_settings()
+        max_size = settings.attachment_max_size_bytes
         return FileRestrictions(
             accepted_file_types=[
-                AcceptedFileType(mimetype=mimetype, size_limit=26214400)
+                AcceptedFileType(mimetype=mimetype, size_limit=max_size)
                 for mimetype in TextMimeTypes.values()
             ],
-            limit=Limit(max_files=3, max_size=26214400),
+            limit=Limit(
+                max_files=settings.attachment_max_files,
+                max_size=max_size,
+            ),
         )
 
     def _build_effective_config_public(
@@ -163,18 +174,15 @@ class AssistantAssembler:
         model_info = None
         if assistant.completion_model:
             prompt_tokens = 0
-            if assistant.prompt:
-                prompt_text = getattr(assistant.prompt, "prompt", None) or getattr(
-                    assistant.prompt, "text", None
-                )
-                if prompt_text:
-                    try:
-                        prompt_tokens = count_assistant_prompt_tokens(
-                            prompt_text, assistant.completion_model.name
-                        )
-                    except Exception:
-                        # If token counting fails, don't break the response
-                        pass
+            prompt_text = assistant.get_prompt_text()
+            if prompt_text:
+                try:
+                    prompt_tokens = count_assistant_prompt_tokens(
+                        prompt_text, assistant.completion_model.name
+                    )
+                except Exception:
+                    # If token counting fails, don't break the response
+                    pass
 
             model_info = ModelInfo(
                 name=assistant.completion_model.name,
